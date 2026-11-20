@@ -59,5 +59,28 @@ jobs:
           name: lutez-dist
           path: dist/
           if-no-files-found: error
-      # The parity job (Go differential + corpus regen) is added in M0.5 together
-      # with parity/go, and checks out submodules recursively.
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+      - run: tools/upstream.sh --verify
+      - run: zig build -Dtarget=x86_64-linux-gnu -Doptimize=ReleaseSafe
+      - name: L2 differential + L3 HTML oracle + dual fuzz + schema
+        run: |
+          cd parity/go
+          CC="zig cc" go run ./cmd/diff --dashboard
+          CC="zig cc" go run ./cmd/html-oracle
+          CC="zig cc" go run ./cmd/fuzz -n 2000
+          go run ./cmd/check-schema
+      - run: cd parity/go && go run ./cmd/gencorpus --gfm-spec ../../upstream/lute/test/gfm-spec.md
+      - run: cd parity/go && go run ./cmd/bench
+      - name: corpus is reproducible
+        run: git diff --exit-code test/corpus

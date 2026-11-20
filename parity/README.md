@@ -48,6 +48,8 @@ go run ./cmd/check-schema
 - The oracle is the upstream Go parser **and** the upstream HTML renderer; both come from
   the submodule, so a pin bump moves the oracle and the fixture generator together.
 
-Status: not implemented yet (M0.5). Until then `lutez_parse` returns
-`LUTEZ_ERR_NOT_IMPLEMENTED`, and `diff` is expected to report every case as
-“not implemented” — that run proves the plumbing end to end.
+Status (v0.1.0): `gencorpus` and the Zig conformance runner are the production parity
+mechanism — `test/corpus/spec.lzc` (652 cases) and `gfm.lzc` (672 cases) are generated from
+the pinned upstream tree and compared byte-for-byte after parsing, and CI fails on corpus
+drift. `cmd/lute-ast`, `cmd/lutez-ast`, `cmd/diff`, `cmd/html-oracle` and `cmd/check-schema`
+remain optional dev aids for per-case investigation; the corpus path is what gates merges.

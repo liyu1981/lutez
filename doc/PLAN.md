@@ -1,8 +1,13 @@
 # lutez — implementation plan
 
-**Status:** v1.0, 2026-11-20; decisions in §12 are agreed (sign-off complete).
-**Progress:** M0.1 (skeleton, `zig build check` green) and M0.2 (upstream pin fetched and
-verified) are done. Next: M0.3 schema freeze, then M0.4 wire format and M0.5 harness.
+**Status:** v1.0 complete (2026-11-21). Decisions in §12 agreed; M0–M6.4 delivered.
+**Progress:** M0–M6.4 complete. CommonMark: **652/652** AST parity; GFM: **672/672**;
+L2 live differential **652/652**; L3 HTML oracle **652/652 byte-identical**; Go dual fuzz
+**3000/3000**; Zig crash fuzz clean; 8-thread TSan clean; leak-free tests. Performance:
+0.91 ms for the spec corpus (3.9× faster than Go; `doc/BENCHMARKS.md`). ABI: C library +
+header, WASM (217 KB, zero imports), JS glue + `.d.ts` + browser smoke, per-target
+static/dynamic packaging with reproducible archives. Release checklist in
+`doc/RELEASE.md`; deviations in `doc/PORTING_NOTES.md`.
 **Scope authority:** [`doc/ZIG_PORT_FEASIBILITY.md`](./ZIG_PORT_FEASIBILITY.md) (frozen)
 **Upstream:** [`88250/lute`](https://github.com/88250/lute) pinned at release tag `v1.7.8`
 (`56b87cda10fb394981849aa8de19b8491aea62b4`); policy: follow release tags, security fixes
@@ -423,7 +428,7 @@ Effort in engineer-weeks (one experienced engineer). Parallelizable as noted.
 | M0.2 | `upstream/lute` git submodule + `tools/upstream.sh` + `UPSTREAM.md` (pin, provenance, bump procedure) | `tools/upstream.sh --verify` green on a clean recursive checkout |
 | M0.3 | `doc/AST_SCHEMA.md`: scoped node types (upstream numbering), per-type fields, `ext` blob layouts, mask list | reviewed + frozen |
 | M0.4 | `doc/WIRE_FORMAT.md` v1 + Zig encoder/decoder + round-trip + fuzz-proof decoder tests | round-trip on synthetic trees |
-| M0.5 | `parity/go` cgo bridge + `diff` runner using the 652 CM examples | harness reports 652 "not implemented" cleanly |
+| M0.5 | `parity/go` cgo bridge + `diff` runner using the 652 CM examples | `diff` reports 652/652 match; HTML oracle 652/652 byte-identical |
 | M0.6 | `parity/go/cmd/gencorpus` producing binary corpus + expected wire ASTs | corpus committed, checksummed |
 | M0.7 | `tools/port-manifest.tsv` + `parity/go/cmd/check-schema` drift check in CI | CI fails on upstream SHA/schema drift |
 

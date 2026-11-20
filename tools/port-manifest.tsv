@@ -1,44 +1,34 @@
-# Zig file -> upstream file -> status (planned | ported | generated | new)
-# Status "ported" requires: no TODO(port) markers, unit tests, zero corpus AST diffs,
-# and this row updated in the same commit (doc/PLAN.md §5.4).
-# Upstream: v1.7.8 (56b87cda10fb394981849aa8de19b8491aea62b4)
+# Zig file -> upstream file(s) -> status (ported | generated | new)
+# Upstream: github.com/88250/lute @ v1.7.8 (56b87cda10fb394981849aa8de19b8491aea62b4)
+# "ported" means: scope-trimmed translation with tests and corpus parity evidence.
 #
 # zig_file	upstream_file	status
-src/lex/token.zig	lex/token.go	planned
-src/lex/lexer.zig	lex/lexer.go	planned
-src/ast/node.zig	ast/node.go	planned
-src/types.zig	ast/node.go + parse/parse.go	ported-subset
-src/ast/tree.zig	ast/node.go	planned
-src/ast/walk.zig	ast/walk.go	planned
+src/lex/token.zig	lex/token.go	ported
+src/lex/lexer.zig	lex/lexer.go	ported
+src/ast/node.zig	ast/node.go	ported
+src/ast/dump.zig	-	new
 src/ast/wire.zig	-	new
-src/arena.zig	-	new
-src/parse/parse.zig	parse/parse.go	planned
-src/parse/blocks.zig	parse/blocks.go	planned
-src/parse/block_start.zig	parse/block_start.go	planned
-src/parse/blockquote.zig	parse/blockquote.go	planned
-src/parse/paragraph.zig	parse/paragraph.go	planned
-src/parse/heading.zig	parse/heading.go	planned
-src/parse/thematic_break.zig	parse/thematic_break.go	planned
-src/parse/list.zig	parse/list.go	planned
-src/parse/html_block.zig	parse/html_block.go	planned
-src/parse/code_block.zig	parse/code_block.go	planned
-src/parse/code_span.zig	parse/code_span.go	planned
-src/parse/link.zig	parse/link.go	planned
-src/parse/inline_link.zig	parse/inline_link.go	planned
-src/parse/inlines.zig	parse/inlines.go	planned
-src/parse/inline.zig	parse/inline.go	planned
-src/parse/delimiter.zig	parse/delimiter.go	planned
-src/parse/text.zig	parse/text.go	planned
-src/parse/image.zig	parse/image.go	planned
-src/parse/linkrefdef_index.zig	parse/linkrefdef_index.go	planned
-src/parse/linkrefdef_case_fold.zig	parse/linkrefdef_case_fold.go	planned
-src/parse/auto_link.zig	parse/auto_link.go	planned
-src/parse/table.zig	parse/table.go	planned
-src/parse/inline_html.zig	parse/inline_html.go	planned
+src/types.zig	ast/node.go + parse/parse.go	ported
 src/html/entity_tables.zig	html/entity.go	generated
-src/html/escape.zig	html/escape.go + html/escape_encode.go + html/unesc_str.go	planned
-src/unicode/tables.zig	Go unicode package (generated)	generated
-src/unicode/fold.zig	golang.org/x/text/cases (generated)	generated
-src/lutez.zig	-	new
+src/html/escape.zig	html/unesc_str.go + html/escape.go + html/escape_encode.go	ported
+src/unicode/tables.zig	Go unicode package + golang.org/x/text/cases	generated
+src/unicode/unicode.zig	-	new
+src/parse/parse.zig	parse/parse.go	ported
+src/parse/tree.zig	parse/parse.go + parse/blocks.go	ported
+src/parse/blocks.zig	parse/block_start.go + blockquote.go + paragraph.go + heading.go + thematic_break.go + code_block.go + list.go	ported
+src/parse/table.zig	parse/table.go	ported
+src/parse/html_block.zig	parse/html_block.go	ported
+src/parse/links.zig	parse/link.go + parse/inline_link.go	ported
+src/parse/refdef.zig	parse/linkrefdef_index.go + parse/linkrefdef_case_fold.go	ported
+src/parse/delimiter.zig	parse/delimiter.go	ported
+src/parse/inline.zig	parse/inline.go + parse/text.go + parse/code_span.go + parse/inlines.go	ported
+src/parse/inline_html.zig	parse/inline_html.go	ported
+src/parse/auto_link.zig	parse/auto_link.go	ported
+src/parse/tlds.zig	parse/auto_link.go (allTLDs)	generated
+src/abi.zig	-	new
+src/doc.zig	-	new
 src/c_api.zig	-	new
 src/wasm.zig	-	new
+src/lutez.zig	-	new
+src/conformance.zig	-	new
+src/fuzz.zig	-	new

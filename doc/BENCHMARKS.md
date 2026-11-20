@@ -39,6 +39,17 @@ CC="zig cc" go run ./cmd/fuzz -n 3000
 go run ./cmd/check-schema
 ```
 
+Fuzzing note: Zig 0.17 has no `-fsanitize=fuzzer`, and AFL++/libFuzzer are not installed in
+this environment. Coverage-guided fuzzing is therefore substituted by (a) the committed
+652+672-case differential corpora, (b) the Go dual-implementation fuzzer
+(`parity/go/cmd/fuzz`, corpus-seeded mutations), and (c) the Zig mutation/random crash
+fuzzer. The planned libFuzzer-on-C-ABI target remains a follow-up when a toolchain with
+libFuzzer support is pinned.
+
+Environment note: Valgrind and ASan are not installed here; leak checking uses Zig's
+`std.testing.allocator` (all tests), and `-Dsanitize=thread` / `-Dsanitize=c` provide
+TSan and C-UB coverage. CI runs the same commands.
+
 Note: arbitrary **invalid UTF-8** inputs are covered for crash/leak robustness by the Zig
 fuzzer; AST parity is defined on valid UTF-8 Markdown (the CommonMark/GFM corpora).
 

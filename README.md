@@ -2,87 +2,107 @@
 
 CommonMark 0.31.2 + GFM **parser** in Zig, ported from
 [`88250/lute`](https://github.com/88250/lute) (@ `v1.7.8`), exposed as a reentrant
-C ABI library and a self-contained WASM module.
+C ABI library, a self-contained WASM module, and a JS wrapper. Rendering is out of scope:
+`lutez` turns Markdown bytes into a versioned binary AST.
 
-> Status: **planning / M0 skeleton.** `lutez_parse()` is not implemented yet; the
-> build, ABI, and test plumbing exist to validate the toolchain and the contract.
+> Status: **v0.1.0.** CommonMark **652/652** AST parity, GFM **672/672** (tables,
+> strikethrough, task lists, extended autolinks), live differential **652/652**, HTML oracle
+> **652/652 byte-identical**, 8-thread TSan-clean, WASM **217 KB / zero imports**, parse
+> **3.9× faster** than upstream Go on the spec corpus. See
+> [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md) and [`doc/PORTING_NOTES.md`](doc/PORTING_NOTES.md).
 
-## Why
+## Quick start
 
-Lute is a Go Markdown engine. `lutez` ports only its CommonMark/GFM parser, keeping
-Lute's AST shape, so existing Lute-shaped consumers can run it from C, C++, Rust, or
-the browser without a Go runtime. No renderers, no SiYuan/Vditor extensions, no HTML5
-parser, no regex, no GC.
+### C
 
-## Read first
+```c
+#include "lutez.h"
+lutez_doc *doc = lutez_parse((const uint8_t *)md, len, NULL); /* NULL = defaults */
+size_t n;
+const uint8_t *ast = lutez_doc_ast(doc, &n);  /* wire format v1 */
+lutez_doc_free(doc);
+```
+
+Build: `zig build` → `zig-out/lib/liblutez.a`, `liblutez.so`, `include/lutez.h`.
+
+### WASM + JS
+
+```js
+import { Lutez } from "./js/lutez.mjs";
+const lutez = await Lutez.load("zig-out/lib/lutez.wasm");
+const doc = lutez.parse("# hi *em*\n");
+const ast = doc.ast();            // Uint8Array (wire format v1)
+doc.free();
+```
+
+Build: `zig build wasm` → `zig-out/lib/lutez.wasm` (wasm32-freestanding, no imports).
+
+### Zig
+
+```zig
+const lutez = @import("lutez");
+var doc = try lutez.parse("# hi\n", .{});
+defer doc.deinit();
+```
+
+## Build and test
+
+Requires Zig **0.17.0** (pinned; no other build dependencies).
+
+```sh
+zig build                    # static + shared liblutez, header
+zig build check              # CI gate: tests + conformance + fuzz + wasm + C smoke
+zig build bench              # parse benchmark (ReleaseFast)
+zig build wasm               # WASM module
+zig build smoke-c            # build + run the C sample
+```
+
+The upstream Go tree is a pinned git submodule at `upstream/lute`, used only by the parity
+tooling and generators:
+
+```sh
+git submodule update --init --recursive
+tools/upstream.sh --verify
+cd parity/go
+CC="zig cc" go run ./cmd/diff --dashboard   # L2 differential
+CC="zig cc" go run ./cmd/html-oracle        # L3 HTML oracle
+CC="zig cc" go run ./cmd/fuzz -n 3000       # dual-implementation fuzz
+go run ./cmd/check-schema                   # schema/whitelist drift
+```
+
+## Release artifacts
+
+```sh
+tools/build-release.sh                                  # all targets x {static,dynamic} + wasm
+tools/build-release.sh --targets native,wasm            # fast local build
+tools/build-release.sh --targets x86_64-linux-dynamic   # one variant
+```
+
+`dist/` contains per-target tarballs, the WASM package (`lutez.wasm` + `lutez.mjs`) and
+`SHA256SUMS`; archives are reproducible. See [`doc/RELEASE.md`](doc/RELEASE.md).
+
+## Documentation
 
 | Document | Contents |
 |---|---|
-| [`doc/PLAN.md`](doc/PLAN.md) | milestones, architecture, gates, risks, open decisions |
-| [`doc/ZIG_PORT_FEASIBILITY.md`](doc/ZIG_PORT_FEASIBILITY.md) | scope + feasibility study (authority for what is in/out) |
-| [`doc/AST_SCHEMA.md`](doc/AST_SCHEMA.md) | scoped node types and fields (draft) |
-| [`doc/WIRE_FORMAT.md`](doc/WIRE_FORMAT.md) | binary AST format v1 (draft) |
-| [`doc/UPSTREAM.md`](doc/UPSTREAM.md) | pinned upstream revision and bump procedure |
-
-## Build
-
-Requires Zig **0.17.0** (pinned; no other dependencies).
-
-```sh
-zig build                    # static + shared liblutez, include/lutez.h
-zig build test               # unit tests
-zig build wasm               # zig-out/lib/lutez.wasm (wasm32-freestanding)
-zig build smoke-c            # build + run samples/c/smoke.c
-zig build check              # CI gate
-node test/wasm/smoke.mjs     # WASM smoke test (after zig build wasm)
-```
-
-The upstream Go tree is a pinned git submodule at `upstream/lute`. It is only needed
-for the parity harness and corpus/table regeneration:
-
-```sh
-git submodule update --init --recursive   # fetch the pinned upstream tree
-tools/upstream.sh --status                # submodule HEAD vs the pin copies
-tools/upstream.sh --verify                # CI gate: pin copies must agree
-```
-
-`zig build check` works on a plain checkout; it never reads `upstream/`.
-
-## Release artifacts (`dist/`)
-
-```sh
-tools/build-release.sh                              # all matrix targets x {static,dynamic} + wasm
-tools/build-release.sh --targets native             # host only, static + dynamic
-tools/build-release.sh --targets native-static      # one variant only
-tools/build-release.sh --targets x86_64-linux-gnu-dynamic,aarch64-macos-static,wasm
-tools/build-release.sh --targets all-static         # all targets, static only
-tools/build-release.sh --skip-tests --no-archive --optimize ReleaseFast
-```
-
-Each package is self-contained and reproducible (deterministic `.tar.gz`, `SHA256SUMS`):
-
-```
-dist/lutez-0.1.0-<target>-static/    include/lutez.h  lib/liblutez.a   [+ lib/lutez_static.lib on Windows]
-dist/lutez-0.1.0-<target>-dynamic/   include/lutez.h  lib/liblutez.so* [+ bin/lutez.dll on Windows]
-dist/lutez-0.1.0-wasm32-freestanding/lutez.wasm
-dist/SHA256SUMS
-```
-
-Windows note: `lutez.lib` is the DLL import library; the static archive is
-`lutez_static.lib` (they would otherwise collide). Every package also carries
-`VERSION`, `LICENSE`, and `NOTICE`.
+| [`doc/PLAN.md`](doc/PLAN.md) | scope, architecture, milestones, gates, risks, decisions |
+| [`doc/ABI.md`](doc/ABI.md) | C / WASM / JS / Zig API, ownership, errors, threading |
+| [`doc/WIRE_FORMAT.md`](doc/WIRE_FORMAT.md) | binary AST v1 |
+| [`doc/AST_SCHEMA.md`](doc/AST_SCHEMA.md) | scoped node types, flags, ext layouts |
+| [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md) | performance vs Go |
+| [`doc/RELEASE.md`](doc/RELEASE.md) | release checklist and verification |
+| [`doc/PORTING_NOTES.md`](doc/PORTING_NOTES.md) | deviations and known simplifications |
+| [`doc/UPSTREAM.md`](doc/UPSTREAM.md) | pinned submodule and tag-bump procedure |
+| [`doc/ZIG_PORT_FEASIBILITY.md`](doc/ZIG_PORT_FEASIBILITY.md) | original feasibility study |
 
 ## Layout
 
-See [`doc/PLAN.md` §4](doc/PLAN.md). Short version:
-
-- `src/{lex,parse,ast,html,unicode}` — the port; `src/{lutez,c_api,wasm}.zig` — API surface.
-- `test/` — every test root, fixture, corpus, and benchmark (nothing test-related at root).
-- `parity/` — the Go differential harness, HTML oracle, corpus generator, schema checker.
-- `tools/` — table generators and the submodule helper.
+- `src/{lex,parse,ast,html,unicode}` — the port; `src/{lutez,c_api,wasm,doc,abi}.zig` — API.
+- `test/` — test roots, fixtures, corpora (`spec.lzc`, `gfm.lzc`), WASM smoke, benchmarks.
+- `parity/` — Go oracle, cgo bridge, corpus generator, schema checker.
+- `tools/` — table generators, submodule helper, release script.
 - `upstream/lute` — pinned git submodule, never edited.
 
 ## License
 
 Mulan PSL v2, same as upstream Lute. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
-Derived work: nodes/parser semantics from Lute, Copyright (c) 2019-present b3log.org.
