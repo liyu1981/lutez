@@ -1,5 +1,13 @@
 const std = @import("std");
 
+fn applySanitize(m: *std.Build.Module, mode: []const u8) void {
+    if (std.mem.eql(u8, mode, "thread")) {
+        m.sanitize_thread = true;
+    } else if (std.mem.eql(u8, mode, "c")) {
+        m.sanitize_c = .full;
+    }
+}
+
 // lutez build graph.
 //
 //   zig build                  native static + shared liblutez, header installed
@@ -17,6 +25,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const sanitize = b.option([]const u8, "sanitize", "sanitize mode: off|thread|c") orelse "off";
 
     // Public Zig module: `@import("lutez")` for Zig consumers.
     const lutez_mod = b.addModule("lutez", .{
@@ -24,6 +33,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    applySanitize(lutez_mod, sanitize);
 
     // ---- native libraries -------------------------------------------------
     //
@@ -45,6 +55,7 @@ pub fn build(b: *std.Build) void {
         }),
         .linkage = .static,
     });
+    static_lib.bundle_compiler_rt = true;
     static_lib.installHeader(b.path("include/lutez.h"), "lutez.h");
     b.installArtifact(static_lib);
 
@@ -72,27 +83,30 @@ pub fn build(b: *std.Build) void {
 
     // ---- tests ------------------------------------------------------------
 
-    const test_step = b.step("test", "Run unit tests");
-    const c_api_mod = b.addModule("lutez_c_api", .{
+    const test_step = b.step("test", "Run unit tests (library + C ABI)");
+    const unit_tests_root = b.createModule(.{
+        .root_source_file = b.path("src/lutez.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    applySanitize(unit_tests_root, sanitize);
+    const unit_tests = b.addTest(.{ .root_module = unit_tests_root });
+    const run_unit_tests = b.addRunArtifact(unit_tests);
+    run_unit_tests.setCwd(b.path("."));
+    test_step.dependOn(&run_unit_tests.step);
+
+    const capi_tests_root = b.createModule(.{
         .root_source_file = b.path("src/c_api.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
         .imports = &.{.{ .name = "lutez", .module = lutez_mod }},
     });
-    const unit_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("test/root.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "lutez", .module = lutez_mod },
-                .{ .name = "lutez_c_api", .module = c_api_mod },
-            },
-        }),
-    });
-    const run_unit_tests = b.addRunArtifact(unit_tests);
-    test_step.dependOn(&run_unit_tests.step);
+    applySanitize(capi_tests_root, sanitize);
+    const capi_tests = b.addTest(.{ .root_module = capi_tests_root });
+    const run_capi_tests = b.addRunArtifact(capi_tests);
+    run_capi_tests.setCwd(b.path("."));
+    test_step.dependOn(&run_capi_tests.step);
 
     // ---- WASM -------------------------------------------------------------
     //
@@ -140,6 +154,22 @@ pub fn build(b: *std.Build) void {
     smoke.root_module.linkLibrary(static_lib);
     const run_smoke = b.addRunArtifact(smoke);
     smoke_step.dependOn(&run_smoke.step);
+
+    // ---- benchmark -------------------------------------------------------
+
+    const bench_step = b.step("bench", "Run the parse benchmark over test/corpus/spec.lzc");
+    const bench_exe = b.addExecutable(.{
+        .name = "lutez-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("test/bench/bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+            .imports = &.{.{ .name = "lutez", .module = lutez_mod }},
+        }),
+    });
+    const run_bench = b.addRunArtifact(bench_exe);
+    run_bench.setCwd(b.path("."));
+    bench_step.dependOn(&run_bench.step);
 
     // ---- aggregate CI gate ------------------------------------------------
 

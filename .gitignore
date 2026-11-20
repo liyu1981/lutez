@@ -19,3 +19,6 @@ test/corpus/generated/
 
 # Node
 node_modules/
+
+# Agent goal state
+.pi/
