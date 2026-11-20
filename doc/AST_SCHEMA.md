@@ -1,7 +1,8 @@
 # lutez AST schema (scoped CommonMark/GFM subset)
 
-**Status: DRAFT v0** — normative only after M0.3 sign-off. Changes require a schema
-version bump and a harness mask update.
+**Status: v1 frozen (M0.3).** Implemented by `src/ast/node.zig`, serialized by
+`src/ast/wire.zig`; changes require a wire-format/schema version bump and a corpus
+regeneration.
 
 Upstream reference: `lute/ast/node.go` @ `v1.7.8` (56b87cd, see `UPSTREAM.md`).
 Wire encoding: `doc/WIRE_FORMAT.md`. This document defines *what* fields exist; the wire
@@ -63,9 +64,15 @@ Numbers are upstream values and must never be renumbered.
 | 15 | `NodeCodeBlockCode` | `NodeCodeBlockCode` | |
 | 16 | `NodeText` | `NodeText` | |
 | 17 | `NodeEmphasis` | `NodeEmphasis` | |
-| 18–21 | `NodeEmA6k{,Open,Close}Marker`, `NodeEmU8e{,Open,Close}Marker` | same | 18,19 = `*`; 20,21 = `_` |
+| 18 | `NodeEmA6kOpenMarker` | `NodeEmA6kOpenMarker` | `*` |
+| 19 | `NodeEmA6kCloseMarker` | `NodeEmA6kCloseMarker` | `*` |
+| 20 | `NodeEmU8eOpenMarker` | `NodeEmU8eOpenMarker` | `_` |
+| 21 | `NodeEmU8eCloseMarker` | `NodeEmU8eCloseMarker` | `_` |
 | 22 | `NodeStrong` | `NodeStrong` | |
-| 23–26 | `NodeStrongA6k/U8e{Open,Close}Marker` | same | |
+| 23 | `NodeStrongA6kOpenMarker` | `NodeStrongA6kOpenMarker` | `**` |
+| 24 | `NodeStrongA6kCloseMarker` | `NodeStrongA6kCloseMarker` | `**` |
+| 25 | `NodeStrongU8eOpenMarker` | `NodeStrongU8eOpenMarker` | `__` |
+| 26 | `NodeStrongU8eCloseMarker` | `NodeStrongU8eCloseMarker` | `__` |
 | 27 | `NodeCodeSpan` | `NodeCodeSpan` | |
 | 28 | `NodeCodeSpanOpenMarker` | `NodeCodeSpanOpenMarker` | |
 | 29 | `NodeCodeSpanContent` | `NodeCodeSpanContent` | |
@@ -132,8 +139,9 @@ Tabs, TabItem, Mindmap, and any type ≥ 500.
 | 5 | `heading_setext` | setext heading | `HeadingSetext` |
 | 6 | `code_fenced` | fenced (vs indented) code block | `IsFencedCodeBlock` |
 | 7 | `task_checked` | task list item checked (legacy boolean view) | `TaskListItemChecked` |
-| 8 | `gfm_auto_link` | autolink produced by GFM extension | internal |
-| 9–15 | reserved | must be zero on write, ignored on read | — |
+| 8–15 | reserved | must be zero on write, ignored on read | — |
+
+Bit 0 is written as 1 in v1 (all tokens in the pool).
 
 `HeadingLevel`, `HtmlBlockType`, `ListData`, `LinkType`, etc. live in `ext`, not in
 flags (they are not booleans).
@@ -263,7 +271,13 @@ bytes ref_label         // raw label as written, pre-fold; canonical fold lives 
 u8 marker               // raw byte between brackets: ' ', 'x', 'X', '-', '/', '>', '!'
 ```
 
-### 5.10 All other types
+### 5.10 `CodeSpan` (27)
+
+```
+u32 code_marker_len    // number of backticks
+```
+
+### 5.11 All other types
 
 `ext_len == 0`.
 

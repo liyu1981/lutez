@@ -17,7 +17,7 @@ Design constraints (from the feasibility report §5 and §6):
 ## 1. Buffer layout
 
 ```
-offset 0                Header (32 bytes)
+offset 0                Header (40 bytes)
 offset 32               Nodes      node_count × node_stride
                        padding to 8-byte alignment
                        Extras     ext_len bytes
@@ -28,11 +28,11 @@ offset 32               Nodes      node_count × node_stride
 ```
 
 All offsets in the header are derived, not stored: a reader computes
-`nodes_off = 32`, `extras_off = align8(32 + node_count*node_stride)`, and so on. This
+`nodes_off = 40`, `extras_off = align8(40 + node_count*node_stride)`, and so on. This
 keeps the header small and eliminates a class of inconsistent-offset bugs. If a future
 version needs sections in a different order, `format_version` changes.
 
-## 2. Header (32 bytes)
+## 2. Header (40 bytes)
 
 | Off | Size | Field | Value / meaning |
 |---:|---:|---|---|
@@ -42,7 +42,9 @@ version needs sections in a different order, `format_version` changes.
 | 16 | 4 | `node_count` | number of nodes, including the document root (≥ 1) |
 | 20 | 4 | `node_stride` | `48` for v1; readers must honor the value and require ≥ 48 |
 | 24 | 4 | `input_len` | normalized input bytes |
-| 28 | 12 | `ext_len`, `pool_len`, `reserved` | totals of the extras / pool sections; `reserved` = 0 |
+| 28 | 4 | `pool_len` | token pool bytes |
+| 32 | 4 | `ext_len` | extras section bytes |
+| 36 | 4 | `reserved` | must be 0 |
 
 Readers must reject `node_stride < 48`, `node_count == 0`, unknown `format_version`, or
 any section that would exceed the buffer length.
@@ -64,6 +66,10 @@ any section that would exceed the buffer length.
 | 36 | 4 | `data_len` | length; `0` when absent |
 | 40 | 4 | `ext_ref` | offset into extras section; `0xFFFFFFFF` = no blob |
 | 44 | 4 | `ext_len` | blob length; `0` when absent |
+
+In v1 **all** tokens live in the pool (`flags` bit 0 = 1); the input section is
+reserved for a future zero-copy mode and is currently empty. `data_ref` is always
+`0xFFFFFFFF` (the C accessor `lutez_node_data` returns the node's token bytes).
 
 Node `0` is always the `NodeDocument` root (`parent == prev == next == 0xFFFFFFFF`).
 Empty tokens and absent ext are both legal; an empty `Data` with `data_ref = 0` and
