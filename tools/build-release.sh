@@ -237,6 +237,8 @@ for i in "${!spec_targets[@]}"; do
   if [ "$variant" = "wasm" ]; then
     [ -f "$prefix/lib/lutez.wasm" ] || die "$label: wasm build produced no lutez.wasm"
     cp "$prefix/lib/lutez.wasm" "$pkg/"
+    cp "$root/js/lutez.mjs" "$pkg/"
+    cp "$root/js/lutez.d.ts" "$pkg/"
   else
     [ -f "$prefix/include/lutez.h" ] || die "$label: missing include/lutez.h"
     cp -R "$prefix/include" "$pkg/"

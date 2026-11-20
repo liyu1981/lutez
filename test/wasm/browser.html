@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>lutez browser smoke test</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem}pre{background:#f4f4f4;padding:1rem;overflow:auto}</style>
+</head>
+<body>
+  <h1>lutez WASM smoke test</h1>
+  <p id="status">loading…</p>
+  <pre id="out"></pre>
+  <script type="module">
+    import { Lutez } from "../../js/lutez.mjs";
+    const out = document.getElementById("out");
+    const status = document.getElementById("status");
+    try {
+      const res = await fetch("../../zig-out/lib/lutez.wasm");
+      if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      const lutez = await Lutez.load(bytes);
+      const doc = lutez.parse("# hello *browser*\n\n- [x] wasm\n- [ ] c\n");
+      const ast = doc.ast();
+      const magic = new TextDecoder().decode(ast.slice(0, 8));
+      if (magic !== "LUTEAST1") throw new Error(`bad magic ${magic}`);
+      status.textContent = `ok — lutez ${lutez.version}, abi ${lutez.abiVersion}, ${doc.nodeCount()} nodes, ${ast.length} AST bytes`;
+      out.textContent = `magic=${magic}\nnodeCount=${doc.nodeCount()}\nrootType=${doc.nodeType(0)}`;
+      doc.free();
+    } catch (e) {
+      status.textContent = `failed: ${e.message}`;
+      console.error(e);
+    }
+  </script>
+</body>
+</html>

@@ -1,7 +1,4 @@
-/* lutez C ABI smoke test.
- *
- * M0 expectations: the ABI/header link and run; parsing reports
- * LUTEZ_ERR_NOT_IMPLEMENTED until the parser lands (doc/PLAN.md §8). */
+/* lutez C ABI smoke test: parse, inspect the wire AST, free. */
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -19,19 +16,31 @@ int main(void) {
   opts.gfm_table = 1;
   opts.setext = 1;
 
-  const char *md = "# hello\n\n- a\n- b\n";
+  const char *md = "# hello *world*\n\n- a\n- b\n";
   lutez_doc *doc = lutez_parse((const uint8_t *)md, strlen(md), &opts);
   if (doc == NULL) {
-    printf("parse: %s (code %d) [expected in M0]\n", lutez_last_error(),
-           (int)lutez_last_error_code());
-    assert(lutez_last_error_code() == LUTEZ_ERR_NOT_IMPLEMENTED);
-  } else {
-    size_t len = 0;
-    const uint8_t *ast = lutez_doc_ast(doc, &len);
-    printf("ast: %zu bytes, %u nodes\n", len, lutez_node_count(doc));
-    assert(ast != NULL && len > 0);
-    lutez_doc_free(doc);
+    fprintf(stderr, "parse failed: %s (code %d)\n", lutez_last_error(),
+            (int)lutez_last_error_code());
+    return 1;
   }
+
+  size_t len = 0;
+  const uint8_t *ast = lutez_doc_ast(doc, &len);
+  assert(ast != NULL && len > 40);
+  assert(memcmp(ast, "LUTEAST1", 8) == 0);
+  assert(lutez_node_count(doc) >= 5);
+  assert(lutez_node_type(doc, 0) == 0); /* document */
+  assert(lutez_node_type(doc, 1) == 2); /* heading */
+  assert(lutez_node_parent(doc, 0) == (uint32_t)LUTEZ_NULL_NODE);
+
+  printf("ast: %zu bytes, %u nodes, first child type=%d\n", len, lutez_node_count(doc),
+         (int)lutez_node_type(doc, 1));
+  lutez_doc_free(doc);
+
+  /* Invalid options must fail cleanly. */
+  opts.struct_size = 2;
+  assert(lutez_parse((const uint8_t *)md, strlen(md), &opts) == NULL);
+  assert(lutez_last_error_code() == LUTEZ_ERR_INVALID_OPTIONS);
 
   printf("ok\n");
   return 0;

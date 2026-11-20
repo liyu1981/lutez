@@ -1,8 +1,8 @@
 /*
  * lutez — CommonMark 0.31.2 + GFM parser (Zig port of upstream lute)
  *
- * C ABI v1 — DRAFT. Status: M0 skeleton; `lutez_parse` returns NULL with
- * LUTEZ_ERR_NOT_IMPLEMENTED until the parser lands (see doc/PLAN.md).
+ * C ABI v1. Parses CommonMark 0.31.2 + GFM into a versioned binary AST; the
+ * document owns all memory until lutez_doc_free().
  *
  * Rules:
  *   - documents are opaque handles; no AST struct is exposed;
@@ -35,7 +35,8 @@ enum {
   LUTEZ_ERR_INVALID_OPTIONS = 2,
   LUTEZ_ERR_INPUT_TOO_LARGE = 3,
   LUTEZ_ERR_NOT_IMPLEMENTED = 4,
-  LUTEZ_ERR_INTERNAL = 5
+  LUTEZ_ERR_INTERNAL = 5,
+  LUTEZ_ERR_BAD_WIRE = 6
 };
 
 /* Versioned options struct (v1, 16 bytes).
@@ -81,11 +82,13 @@ void lutez_doc_free(lutez_doc *doc);
 
 /* ---- optional ergonomic accessors -------------------------------------- *
  * Node handles are uint32_t indices; LUTEZ_NULL_NODE means "absent".
- * Invalid doc/node values return 0 / LUTEZ_NULL_NODE / NULL, never crash. */
+ * lutez_node_data returns the node's token bytes (same as the wire token pool).
+ * Invalid doc/node values return 0 / -1 / LUTEZ_NULL_NODE / NULL, never crash. */
 #define LUTEZ_NULL_NODE 0xFFFFFFFFu
 
 uint32_t lutez_node_count(const lutez_doc *doc);
 int32_t lutez_node_type(const lutez_doc *doc, uint32_t node);
+uint32_t lutez_node_parent(const lutez_doc *doc, uint32_t node);
 uint32_t lutez_node_first_child(const lutez_doc *doc, uint32_t node);
 uint32_t lutez_node_next(const lutez_doc *doc, uint32_t node);
 const uint8_t *lutez_node_data(const lutez_doc *doc, uint32_t node, size_t *out_len);

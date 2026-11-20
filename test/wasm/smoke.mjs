@@ -1,45 +1,34 @@
-// Node smoke test for the freestanding WASM module (M0: version/error surface).
-// Asserts: zero imports, expected exports, ABI version, stub parse error.
+// Node smoke test for the freestanding WASM module and js/lutez.mjs glue.
 import { readFileSync } from "node:fs";
+import { Lutez } from "../../js/lutez.mjs";
 
-// Usage: node test/wasm/smoke.mjs [path/to/lutez.wasm]
 const path = process.argv[2] ?? new URL("../../zig-out/lib/lutez.wasm", import.meta.url);
 const bytes = readFileSync(path);
 const module = new WebAssembly.Module(bytes);
-
 const imports = WebAssembly.Module.imports(module);
-if (imports.length !== 0) {
-  throw new Error(`expected zero imports, got ${JSON.stringify(imports)}`);
+if (imports.length !== 0) throw new Error(`expected zero imports, got ${JSON.stringify(imports)}`);
+
+const lutez = await Lutez.load(bytes);
+if (lutez.abiVersion !== 1) throw new Error(`unexpected ABI ${lutez.abiVersion}`);
+
+const doc = lutez.parse("# hi *em*\n\n- a\n- b\n");
+const count = doc.nodeCount();
+const ast = doc.ast();
+const magic = new TextDecoder().decode(ast.slice(0, 8));
+if (magic !== "LUTEAST1") throw new Error(`bad AST magic: ${magic}`);
+if (count < 5) throw new Error(`unexpected node count ${count}`);
+if (doc.nodeType(0) !== 0) throw new Error(`root is not document: ${doc.nodeType(0)}`);
+if (doc.nodeType(1) !== 2) throw new Error(`first child is not heading: ${doc.nodeType(1)}`);
+doc.free();
+
+let threw = false;
+try {
+  lutez.parse("\u0000"); // still valid markdown (NUL is replaced), must not throw
+} catch (e) {
+  threw = true;
 }
+if (threw) throw new Error("parse of NUL input should not fail");
 
-const instance = new WebAssembly.Instance(module, {});
-const x = instance.exports;
-const required = [
-  "memory",
-  "lutez_alloc",
-  "lutez_free",
-  "lutez_parse",
-  "lutez_doc_ast",
-  "lutez_doc_free",
-  "lutez_last_error_ptr",
-  "lutez_version",
-  "lutez_abi_version",
-];
-for (const name of required) {
-  if (!(name in x)) throw new Error(`missing export: ${name}`);
-}
-
-const abi = x.lutez_abi_version();
-if (abi !== 1) throw new Error(`unexpected abi version: ${abi}`);
-
-// WASM `u32` exports surface as signed JS numbers: coerce with `>>> 0`.
-const handle = x.lutez_parse(0, 0, 0) >>> 0;
-if (handle !== 0xffffffff) throw new Error(`expected error handle, got ${handle}`);
-
-const packed = x.lutez_last_error_ptr();
-const ptr = Number(packed >> 32n);
-const len = Number(packed & 0xffffffffn);
-const msg = Buffer.from(new Uint8Array(x.memory.buffer, ptr, len)).toString("utf8");
-if (msg !== "not implemented") throw new Error(`unexpected error: ${msg}`);
-
-console.log(`wasm ok: ${bytes.length} bytes, 0 imports, abi ${abi}, err "${msg}"`);
+console.log(
+  `wasm ok: ${bytes.length} bytes, 0 imports, abi ${lutez.abiVersion}, v${lutez.version}, nodes ${count}`,
+);
