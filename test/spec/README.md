@@ -1,7 +1,7 @@
 # CommonMark spec corpus
 
 `commonmark-spec.json` is copied verbatim from the pinned upstream submodule
-(`61eb27b6d43418b79ee91d8618f7acbccdcd1ba5`):
+(`v1.7.8`, `56b87cda10fb394981849aa8de19b8491aea62b4`):
 
     upstream/lute/test/commonmark-spec.json
 
@@ -10,5 +10,10 @@
 - Upstream file is MIT/CC-BY-SA-4.0 licensed; see the upstream `test/commonmark-spec.md`
   header. This copy is test data only and is not linked into `liblutez`.
 
-Do not hand-edit. Refresh with `git submodule update --init` + the copy command in
-`doc/UPSTREAM.md` §4, and update the SHA above.
+Do not hand-edit. Refresh from the pinned submodule and update the SHA above:
+
+    git submodule update --init
+    cp upstream/lute/test/commonmark-spec.json test/spec/commonmark-spec.json
+    sha256sum test/spec/commonmark-spec.json
+
+See `doc/UPSTREAM.md` “Bump procedure” for when this is required.

@@ -1,11 +1,12 @@
 # lutez — implementation plan
 
-**Status:** draft v0.1, 2026-11-20, awaiting sign-off (see §12).
+**Status:** v1.0, 2026-11-20; decisions in §12 are agreed (sign-off complete).
 **Progress:** M0.1 (skeleton, `zig build check` green) and M0.2 (upstream pin fetched and
 verified) are done. Next: M0.3 schema freeze, then M0.4 wire format and M0.5 harness.
 **Scope authority:** [`doc/ZIG_PORT_FEASIBILITY.md`](./ZIG_PORT_FEASIBILITY.md) (frozen)
-**Upstream:** [`88250/lute`](https://github.com/88250/lute) pinned at `61eb27b6d43418b79ee91d8618f7acbccdcd1ba5`
-(see [`UPSTREAM.md`](./UPSTREAM.md))
+**Upstream:** [`88250/lute`](https://github.com/88250/lute) pinned at release tag `v1.7.8`
+(`56b87cda10fb394981849aa8de19b8491aea62b4`); policy: follow release tags, security fixes
+may be adopted early (see [`UPSTREAM.md`](./UPSTREAM.md))
 **Target toolchain:** Zig 0.17.0 (pinned), no external Zig dependencies
 
 `lutez` is a Zig port of Lute's CommonMark 0.31.2 + GFM **parser only**, exposed as a
@@ -305,7 +306,7 @@ Three rules keep this honest:
 Every ported file starts with a provenance header:
 
 ```zig
-// Ported from lute/parse/delimiter.go @ 61eb27b (Mulan PSL v2, (c) 2019-present b3log.org)
+// Ported from lute/parse/delimiter.go @ v1.7.8 (Mulan PSL v2, (c) 2019-present b3log.org)
 // Scope: CommonMark/GFM only; Kramdown IAL, math, emoji branches removed (see doc/PLAN.md §1.2).
 ```
 
@@ -582,31 +583,35 @@ HTML oracle at ≥ 95 %. If the slice is not at ≥ 90 % by week 8, escalate to 
 
 ---
 
-## 12. Open decisions (need sign-off before M0.3/M0.4 freeze)
+## 12. Decisions (agreed 2026-11-20)
 
-1. **AST compatibility level** — recommend: keep upstream `NodeType` numeric values and
-   type strings (`"Paragraph"`, `"Emphasis"`, …), so JSON/goldens and consumer
-   expectations transfer. Alternative: new clean schema (cheaper, breaks compatibility).
-2. **Wire format** — recommend: binary LE v1 only in the core; JSON only in the Go
-   harness. Alternative: add a Zig JSON writer (adds ~1–2 weeks + `encoding/json`
-   parity risk).
-3. **Upstream pin** — recommend `61eb27b` (master, 2026-11-13), not tag `v1.7.8`: ~830
-   lines of scoped-file changes landed after the tag. Confirm, or choose tag for a
-   quieter baseline.
-4. **C accessors in v1** — recommend yes (cheap, useful), accessor reads are validated
-   against the wire format.
-5. **Input ownership** — recommend always-copy (safe) with an optional v1.1
-   `lutez_parse_owned` zero-copy mode. Alternative: owned-from-start.
-6. **Release optimization mode** — recommend `ReleaseSafe` default; `ReleaseFast`
-   measured but opt-in.
-7. **Zig pin** — 0.17.0 (matches feasibility validation). Upgrading Zig is a separate,
-   benchmarked PR.
-8. **Repo location/name** — `lutez`, module `lutez`, C prefix `lutez_`, header
-   `include/lutez.h`. Confirm (affects ABI naming forever).
-9. **Scope fence** — confirm §1.2 remains a hard exclusion for v0.1, including footnotes/
-   math/YAML/emoji/SiYuan extensions.
+All items below were reviewed and accepted; item 3 was modified by the user. They are no
+longer open, and changing one requires an ADR note in this file.
 
----
+1. **AST compatibility level — accepted.** Keep upstream `NodeType` numeric values and
+   type strings (`"NodeParagraph"`, `"NodeTable"`, …) so JSON/goldens and consumer
+   expectations transfer.
+2. **Wire format — accepted.** Binary little-endian v1 in the core; JSON only in the Go
+   parity harness. No `encoding/json` semantics reimplementation in Zig.
+3. **Upstream pin — modified: pin the newest release tag.** Target `v1.7.8`
+   (`56b87cda10fb394981849aa8de19b8491aea62b4`, 2026-09-23) instead of master
+   (`61eb27b`, 2026-11-13). We track **release tags**, not `master`; a bump happens when
+   a newer tag is published. Exception: a **security fix** may be adopted before the next
+   tag, cherry-picking the minimal upstream change and recording it in
+   `doc/UPSTREAM.md` §“Security exceptions”. Consequence: ~830 changed lines that landed
+   between the tag and master (link-ref-def index, tables, inline, parser) are
+   deliberately **deferred** to the next tag bump, where they are ported as a reviewed
+   delta.
+4. **C accessors in v1 — accepted.** Yes; accessor reads validate against the wire format.
+5. **Input ownership — accepted.** Always copy into the document arena in v1; an optional
+   `lutez_parse_owned` zero-copy mode may be added in v1.1.
+6. **Release optimization mode — accepted.** `ReleaseSafe` is the default for release
+   artifacts; `ReleaseFast` is measured and opt-in.
+7. **Zig pin — accepted.** Zig 0.17.0. Upgrading Zig is a separate, benchmarked PR.
+8. **Repo location/name — accepted.** Repo/module `lutez`, C prefix `lutez_`, header
+   `include/lutez.h`, submodule `upstream/lute`.
+9. **Scope fence — accepted.** §1.2 stays a hard exclusion for v0.1 (footnotes, math,
+   YAML, emoji, SiYuan extensions, renderers, HTML parser).
 
 ## 13. Immediate next actions (first commits)
 

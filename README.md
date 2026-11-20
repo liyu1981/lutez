@@ -1,7 +1,7 @@
 # lutez
 
 CommonMark 0.31.2 + GFM **parser** in Zig, ported from
-[`88250/lute`](https://github.com/88250/lute) (@ `61eb27b`), exposed as a reentrant
+[`88250/lute`](https://github.com/88250/lute) (@ `v1.7.8`), exposed as a reentrant
 C ABI library and a self-contained WASM module.
 
 > Status: **planning / M0 skeleton.** `lutez_parse()` is not implemented yet; the

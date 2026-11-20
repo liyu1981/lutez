@@ -4,7 +4,7 @@
 #   tools/upstream.sh --status        # submodule HEAD, pin sources, drift between them
 #   tools/upstream.sh --verify        # exit 1 if pin copies disagree (CI gate)
 #   tools/upstream.sh --diff          # scoped-file diff pin..origin/master
-#   tools/upstream.sh --bump <ref>    # checkout <ref> in the submodule (does not edit docs)
+#   tools/upstream.sh --bump <ref>    # checkout <ref> (e.g. next release tag) in the submodule
 #
 # The gitlink recorded by the submodule IS the pin. `src/types.zig:upstream_sha` and
 # NOTICE mirror it for runtime reporting and human readers; --verify keeps them honest.
@@ -42,16 +42,19 @@ case "${1:---status}" in
     echo "pin ok: $sub_head"
     ;;
   --diff)
-    git -C "$sub" fetch -q origin master || git -C "$sub" fetch -q --unshallow origin
+    git -C "$sub" fetch -q --depth 1 origin master \
+      || git -C "$sub" fetch -q --unshallow origin
     git -C "$sub" diff --stat "$sub_head" origin/master -- \
       lex ast parse html/entity.go html/escape.go html/escape_encode.go html/unesc_str.go
     ;;
   --bump)
     ref="${2:-}"; [ -n "$ref" ] || die "usage: $0 --bump <ref>"
-    git -C "$sub" fetch origin "$ref" || git -C "$sub" fetch --unshallow origin
+    git -C "$sub" fetch -q --depth 1 origin "$ref" \
+      || git -C "$sub" fetch -q origin "$ref" \
+      || git -C "$sub" fetch -q --unshallow origin
     git -C "$sub" checkout -q --detach FETCH_HEAD
     echo "submodule now at $(git -C "$sub" rev-parse HEAD)"
-    echo "now: update src/types.zig upstream_sha + NOTICE, run --verify, then follow doc/UPSTREAM.md §4"
+    echo "now: update src/types.zig upstream_sha + NOTICE, run --verify, then follow doc/UPSTREAM.md 'Bump procedure'"
     ;;
   *)
     die "usage: $0 [--status|--verify|--diff|--bump <ref>]"

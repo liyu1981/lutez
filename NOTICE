@@ -7,7 +7,7 @@ This product is a derived work of:
   https://github.com/88250/lute
   Licensed under the Mulan Permissive Software License, Version 2 (Mulan PSL v2).
 
-Upstream revision ported: 61eb27b6d43418b79ee91d8618f7acbccdcd1ba5 (2026-11-13).
+Upstream revision ported: v1.7.8 (56b87cda10fb394981849aa8de19b8491aea62b4, 2026-09-23).
 
 The Zig translation re-implements the CommonMark/GFM parser subset of the following
 upstream files (see tools/port-manifest.tsv for the machine-readable mapping):

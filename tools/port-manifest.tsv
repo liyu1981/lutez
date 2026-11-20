@@ -1,7 +1,7 @@
 # Zig file -> upstream file -> status (planned | ported | generated | new)
 # Status "ported" requires: no TODO(port) markers, unit tests, zero corpus AST diffs,
 # and this row updated in the same commit (doc/PLAN.md §5.4).
-# Upstream SHA: 61eb27b6d43418b79ee91d8618f7acbccdcd1ba5
+# Upstream: v1.7.8 (56b87cda10fb394981849aa8de19b8491aea62b4)
 #
 # zig_file	upstream_file	status
 src/lex/token.zig	lex/token.go	planned

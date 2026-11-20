@@ -3,7 +3,7 @@
 **Status: DRAFT v0** — normative only after M0.3 sign-off. Changes require a schema
 version bump and a harness mask update.
 
-Upstream reference: `lute/ast/node.go` @ `61eb27b` (see `UPSTREAM.md`).
+Upstream reference: `lute/ast/node.go` @ `v1.7.8` (56b87cd, see `UPSTREAM.md`).
 Wire encoding: `doc/WIRE_FORMAT.md`. This document defines *what* fields exist; the wire
 document defines *how* they are encoded.
 

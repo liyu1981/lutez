@@ -2,7 +2,7 @@
 //!
 //! Public Zig API. The C ABI lives in `c_api.zig`, the WASM ABI in `wasm.zig`.
 //!
-//! Ported from: github.com/88250/lute @ 61eb27b (Mulan PSL v2, (c) 2019-present b3log.org).
+//! Ported from: github.com/88250/lute @ v1.7.8 (Mulan PSL v2, (c) 2019-present b3log.org).
 //! Scope: CommonMark/GFM parsing only; no renderers, no SiYuan/Vditor extensions.
 //! See doc/PLAN.md §1 and doc/ZIG_PORT_FEASIBILITY.md.
 //!

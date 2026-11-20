@@ -1,6 +1,6 @@
 //! lutez — shared types: node types, options, errors, version.
 //
-// Ported-from reference: lute/ast/node.go, lute/parse/parse.go @ 61eb27b (Mulan PSL v2).
+// Ported-from reference: lute/ast/node.go, lute/parse/parse.go @ v1.7.8 (Mulan PSL v2).
 // Only the CommonMark/GFM subset is represented; see doc/AST_SCHEMA.md.
 
 const std = @import("std");
@@ -17,7 +17,7 @@ pub const wire_format_version: u32 = 1;
 
 /// Upstream lute revision this port tracks. Must equal the `upstream/lute` submodule
 /// gitlink; `tools/upstream.sh --verify` enforces this in CI.
-pub const upstream_sha = "61eb27b6d43418b79ee91d8618f7acbccdcd1ba5";
+pub const upstream_sha = "56b87cda10fb394981849aa8de19b8491aea62b4";
 
 /// Sentinel node handle: "no node".
 pub const null_node: u32 = 0xFFFF_FFFF;
