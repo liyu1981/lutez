@@ -1,0 +1,29 @@
+lutez — CommonMark/GFM parser in Zig, ported from Lute.
+
+This product is a derived work of:
+
+  Lute — 一款结构化的 Markdown 引擎，支持 Go 和 JavaScript
+  Copyright (c) 2019-present, b3log.org
+  https://github.com/88250/lute
+  Licensed under the Mulan Permissive Software License, Version 2 (Mulan PSL v2).
+
+Upstream revision ported: 61eb27b6d43418b79ee91d8618f7acbccdcd1ba5 (2026-11-13).
+
+The Zig translation re-implements the CommonMark/GFM parser subset of the following
+upstream files (see tools/port-manifest.tsv for the machine-readable mapping):
+
+  lex/lexer.go, lex/token.go
+  ast/node.go (subset), ast/walk.go
+  parse/parse.go, blocks.go, block_start.go, blockquote.go, paragraph.go,
+        heading.go, thematic_break.go, list.go, html_block.go, code_block.go,
+        code_span.go, link.go, inline_link.go, inlines.go, inline.go,
+        delimiter.go, text.go, image.go, linkrefdef_index.go,
+        linkrefdef_case_fold.go, auto_link.go, table.go, inline_html.go
+  html/entity.go (generated tables), html/unesc_str.go, html/escape.go,
+        html/escape_encode.go
+
+No upstream source code is vendored into src/; it is translation with attribution.
+The upstream Go tree is a git submodule at upstream/lute (pinned by the superproject
+commit) and is used for differential testing and table generation only.
+
+License text: see LICENSE (Mulan PSL v2).

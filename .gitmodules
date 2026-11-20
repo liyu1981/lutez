@@ -1,0 +1,4 @@
+[submodule "lute"]
+	path = upstream/lute
+	url = https://github.com/88250/lute
+	shallow = true

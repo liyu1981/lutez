@@ -1,0 +1,44 @@
+# Zig file -> upstream file -> status (planned | ported | generated | new)
+# Status "ported" requires: no TODO(port) markers, unit tests, zero corpus AST diffs,
+# and this row updated in the same commit (doc/PLAN.md §5.4).
+# Upstream SHA: 61eb27b6d43418b79ee91d8618f7acbccdcd1ba5
+#
+# zig_file	upstream_file	status
+src/lex/token.zig	lex/token.go	planned
+src/lex/lexer.zig	lex/lexer.go	planned
+src/ast/node.zig	ast/node.go	planned
+src/types.zig	ast/node.go + parse/parse.go	ported-subset
+src/ast/tree.zig	ast/node.go	planned
+src/ast/walk.zig	ast/walk.go	planned
+src/ast/wire.zig	-	new
+src/arena.zig	-	new
+src/parse/parse.zig	parse/parse.go	planned
+src/parse/blocks.zig	parse/blocks.go	planned
+src/parse/block_start.zig	parse/block_start.go	planned
+src/parse/blockquote.zig	parse/blockquote.go	planned
+src/parse/paragraph.zig	parse/paragraph.go	planned
+src/parse/heading.zig	parse/heading.go	planned
+src/parse/thematic_break.zig	parse/thematic_break.go	planned
+src/parse/list.zig	parse/list.go	planned
+src/parse/html_block.zig	parse/html_block.go	planned
+src/parse/code_block.zig	parse/code_block.go	planned
+src/parse/code_span.zig	parse/code_span.go	planned
+src/parse/link.zig	parse/link.go	planned
+src/parse/inline_link.zig	parse/inline_link.go	planned
+src/parse/inlines.zig	parse/inlines.go	planned
+src/parse/inline.zig	parse/inline.go	planned
+src/parse/delimiter.zig	parse/delimiter.go	planned
+src/parse/text.zig	parse/text.go	planned
+src/parse/image.zig	parse/image.go	planned
+src/parse/linkrefdef_index.zig	parse/linkrefdef_index.go	planned
+src/parse/linkrefdef_case_fold.zig	parse/linkrefdef_case_fold.go	planned
+src/parse/auto_link.zig	parse/auto_link.go	planned
+src/parse/table.zig	parse/table.go	planned
+src/parse/inline_html.zig	parse/inline_html.go	planned
+src/html/entity_tables.zig	html/entity.go	generated
+src/html/escape.zig	html/escape.go + html/escape_encode.go + html/unesc_str.go	planned
+src/unicode/tables.zig	Go unicode package (generated)	generated
+src/unicode/fold.zig	golang.org/x/text/cases (generated)	generated
+src/lutez.zig	-	new
+src/c_api.zig	-	new
+src/wasm.zig	-	new
