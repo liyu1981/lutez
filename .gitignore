@@ -1,5 +1,6 @@
 # Zig build outputs
 zig-out/
+dist/
 .zig-cache/
 zig-cache/
 

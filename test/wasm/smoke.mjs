@@ -2,7 +2,8 @@
 // Asserts: zero imports, expected exports, ABI version, stub parse error.
 import { readFileSync } from "node:fs";
 
-const path = new URL("../../zig-out/lib/lutez.wasm", import.meta.url);
+// Usage: node test/wasm/smoke.mjs [path/to/lutez.wasm]
+const path = process.argv[2] ?? new URL("../../zig-out/lib/lutez.wasm", import.meta.url);
 const bytes = readFileSync(path);
 const module = new WebAssembly.Module(bytes);
 

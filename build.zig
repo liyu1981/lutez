@@ -26,9 +26,15 @@ pub fn build(b: *std.Build) void {
     });
 
     // ---- native libraries -------------------------------------------------
+    //
+    // Windows: the DLL import library and a static library would both be named
+    // `lutez.lib`, so the static archive is `lutez_static.lib` there.
+
+    const is_windows = target.result.os.tag == .windows;
+    const static_name: []const u8 = if (is_windows) "lutez_static" else "lutez";
 
     const static_lib = b.addLibrary(.{
-        .name = "lutez",
+        .name = static_name,
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/c_api.zig"),
             .target = target,
@@ -57,6 +63,12 @@ pub fn build(b: *std.Build) void {
     });
     shared_lib.installHeader(b.path("include/lutez.h"), "lutez.h");
     b.installArtifact(shared_lib);
+
+    // Variant install steps used by tools/build-release.sh: one linkage per prefix.
+    const static_only_step = b.step("lib-static", "Install only static liblutez (+ header)");
+    static_only_step.dependOn(&b.addInstallArtifact(static_lib, .{}).step);
+    const dynamic_only_step = b.step("lib-dynamic", "Install only shared liblutez (+ header)");
+    dynamic_only_step.dependOn(&b.addInstallArtifact(shared_lib, .{}).step);
 
     // ---- tests ------------------------------------------------------------
 

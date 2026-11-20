@@ -267,6 +267,7 @@ lutez/
 │       ├── lutez/             # cgo bridge to zig-out/lib/liblutez.a
 │       └── cmd/{lute-ast,lutez-ast,diff,html-oracle,gencorpus,check-schema}
 ├── tools/
+│   ├── build-release.sh       # dist/: static/dynamic per target, wasm, header, checksums
 │   ├── upstream.sh            # submodule status / verify / diff / bump
 │   ├── gen-unicode/           # Go generator: unicode + cases.Fold tables → Zig
 │   ├── gen-entity/            # Go generator: upstream html/entity.go → Zig table
@@ -274,6 +275,7 @@ lutez/
 ├── js/                        # WASM glue + Node smoke test
 ├── samples/c/                 # C ABI sample
 ├── doc/{PLAN.md,AST_SCHEMA.md,WIRE_FORMAT.md,UPSTREAM.md,ZIG_PORT_FEASIBILITY.md}
+├── dist/                      # gitignored release output (tools/build-release.sh)
 └── upstream/lute/             # git submodule at the pinned commit (never edited)
 ```
 
@@ -416,7 +418,7 @@ Effort in engineer-weeks (one experienced engineer). Parallelizable as noted.
 
 | ID | Task | Exit |
 |---|---|---|
-| M0.1 | Repo skeleton, `build.zig` (static/shared/wasm/test/smoke-c steps), CI matrix, license headers | `zig build check` green |
+| M0.1 | Repo skeleton, `build.zig` (static/shared/wasm/test/smoke-c steps), `tools/build-release.sh`, CI matrix, license headers | `zig build check` green; `tools/build-release.sh --targets native` produces `dist/` |
 | M0.2 | `upstream/lute` git submodule + `tools/upstream.sh` + `UPSTREAM.md` (pin, provenance, bump procedure) | `tools/upstream.sh --verify` green on a clean recursive checkout |
 | M0.3 | `doc/AST_SCHEMA.md`: scoped node types (upstream numbering), per-type fields, `ext` blob layouts, mask list | reviewed + frozen |
 | M0.4 | `doc/WIRE_FORMAT.md` v1 + Zig encoder/decoder + round-trip + fuzz-proof decoder tests | round-trip on synthetic trees |
@@ -495,10 +497,12 @@ parity. If G3 is not met by week 14, invoke the stop rule (§10, R1).
 - M5.3 `src/wasm.zig` slot table, `u64` packed ptr/len, growth-safe glue.
 - M5.4 JS glue (`js/lutez.mjs` + `.d.ts`) and C sample (`samples/c/`), Node + browser
   smoke tests in CI.
-- M5.5 Cross-compile matrix: linux-gnu/musl, macos aarch64/x86_64, windows-gnu
-  (dll+lib), wasm32-freestanding; artifact naming + checksums.
-- M5.6 Packaging: `zig build dist` tarball (header, static/shared libs, wasm, LICENSE,
-  NOTICE, README snippet).
+- M5.5 Cross-compile matrix driven by `tools/build-release.sh`: linux-gnu/musl,
+  macos aarch64/x86_64, windows-gnu (DLL + import lib + namespaced static lib),
+  wasm32-freestanding; static and dynamic variants are separate packages.
+- M5.6 Packaging: `tools/build-release.sh` → `dist/` (header, static/shared libs, wasm,
+  LICENSE, NOTICE, VERSION, deterministic `.tar.gz`, `SHA256SUMS`); per-variant
+  selection (`--targets <triple>-static|-dynamic`, `native`, `all-static`, `wasm`).
 
 **Gate G5:** D1, D2, D3 met; Node/browser/C smoke tests green.
 

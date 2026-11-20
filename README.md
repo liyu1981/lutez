@@ -48,6 +48,30 @@ tools/upstream.sh --verify                # CI gate: pin copies must agree
 
 `zig build check` works on a plain checkout; it never reads `upstream/`.
 
+## Release artifacts (`dist/`)
+
+```sh
+tools/build-release.sh                              # all matrix targets x {static,dynamic} + wasm
+tools/build-release.sh --targets native             # host only, static + dynamic
+tools/build-release.sh --targets native-static      # one variant only
+tools/build-release.sh --targets x86_64-linux-gnu-dynamic,aarch64-macos-static,wasm
+tools/build-release.sh --targets all-static         # all targets, static only
+tools/build-release.sh --skip-tests --no-archive --optimize ReleaseFast
+```
+
+Each package is self-contained and reproducible (deterministic `.tar.gz`, `SHA256SUMS`):
+
+```
+dist/lutez-0.1.0-<target>-static/    include/lutez.h  lib/liblutez.a   [+ lib/lutez_static.lib on Windows]
+dist/lutez-0.1.0-<target>-dynamic/   include/lutez.h  lib/liblutez.so* [+ bin/lutez.dll on Windows]
+dist/lutez-0.1.0-wasm32-freestanding/lutez.wasm
+dist/SHA256SUMS
+```
+
+Windows note: `lutez.lib` is the DLL import library; the static archive is
+`lutez_static.lib` (they would otherwise collide). Every package also carries
+`VERSION`, `LICENSE`, and `NOTICE`.
+
 ## Layout
 
 See [`doc/PLAN.md` §4](doc/PLAN.md). Short version:

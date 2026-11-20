@@ -10,6 +10,9 @@
  *   - lutez_doc_ast() bytes are valid until lutez_doc_free();
  *   - the input buffer is copied: the caller may free it right after lutez_parse().
  *
+ * Windows: link `lutez.lib` for the DLL (with `lutez.dll`) or `lutez_static.lib`
+ * for the static library. Other platforms: `-llutez` / `liblutez.a`.
+ *
  * License: Mulan PSL v2 (see LICENSE). Derived from github.com/88250/lute.
  */
 #ifndef LUTEZ_H
