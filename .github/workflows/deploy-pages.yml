@@ -2,7 +2,7 @@ name: pages
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -38,6 +38,7 @@ jobs:
         env:
           LUTEZ_REPO_URL: ${{ github.server_url }}/${{ github.repository }}
       - run: cd site && pnpm check:links
+      - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/dist

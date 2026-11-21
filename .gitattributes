@@ -1,0 +1,5 @@
+# Normalize text files to LF on every platform (zig fmt --check depends on it).
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.wasm binary

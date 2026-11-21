@@ -52,7 +52,7 @@ textarea re-parses after a short debounce; the AST JSON tab is copyable.
 
 ## Deploy to GitHub Pages
 
-`.github/workflows/pages.yml` builds Zig + the site and deploys `site/dist` on pushes to
+`.github/workflows/deploy-pages.yml` builds Zig + the site and deploys `site/dist` on pushes to
 `main`. It sets `LUTEZ_REPO_URL` from the repository so docs source links work. Enable
 **Settings → Pages → Source: GitHub Actions** once in the repository. For a manual deploy,
 run the two commands above and publish `site/dist/`.

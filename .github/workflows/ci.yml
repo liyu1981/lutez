@@ -28,6 +28,7 @@ jobs:
         with:
           version: ${{ env.ZIG_VERSION }}
       - run: zig fmt --check build.zig src test samples
+        if: runner.os == 'Linux'
       - run: zig build check
 
   wasm:
@@ -95,6 +96,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.27"
+          cache-dependency-path: parity/go/go.sum
       - run: tools/upstream.sh --verify
       - run: zig build -Dtarget=x86_64-linux-gnu -Doptimize=ReleaseSafe
       - name: L2 differential + L3 HTML oracle + dual fuzz + schema

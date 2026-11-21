@@ -85,7 +85,7 @@ tools/build-release.sh --targets x86_64-linux-dynamic   # one variant
 
 The project site lives in `site/`: a landing page, generated documentation and a
 WASM-powered AST playground. It is a structured static build (no single-page monolith) and
-publishes to GitHub Pages via `.github/workflows/pages.yml`.
+publishes to GitHub Pages via `.github/workflows/deploy-pages.yml`.
 
 ```sh
 cd site
