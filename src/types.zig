@@ -203,8 +203,9 @@ pub const ExtensionMask = struct {
     pub const wiki_links: u32 = 1 << 2;
     pub const tags: u32 = 1 << 3;
     pub const outliner_blocks: u32 = 1 << 4;
+    pub const outliner_keywords: u32 = 1 << 5;
 
-    pub const all: u32 = frontmatter | math | wiki_links | tags | outliner_blocks;
+    pub const all: u32 = frontmatter | math | wiki_links | tags | outliner_blocks | outliner_keywords;
 };
 
 /// Stable extension kind registry (wire/ABI).
@@ -215,6 +216,7 @@ pub const ExtensionKind = struct {
     pub const frontmatter: u32 = 4;
     pub const logseq_property: u32 = 5;
     pub const obsidian_block_id: u32 = 6;
+    pub const outliner_keyword: u32 = 7;
 };
 
 pub const ExtensionFlags = struct {
@@ -274,7 +276,7 @@ test "extension node types and kinds are exposed" {
     try std.testing.expectEqualStrings("NodeBlockExtension", nodeTypeString(.block_extension));
     try std.testing.expectEqualStrings("NodeInlineExtension", nodeTypeString(.inline_extension));
     try std.testing.expectEqual(NodeType.inline_extension, nodeTypeFromInt(501).?);
-    try std.testing.expectEqual(@as(u32, 31), ExtensionMask.all);
+    try std.testing.expectEqual(@as(u32, 63), ExtensionMask.all);
     try std.testing.expectEqual(@as(u32, 1), ExtensionKind.math);
 }
 

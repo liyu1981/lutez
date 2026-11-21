@@ -78,7 +78,8 @@ enum {
   LUTEZ_EXT_MATH            = 1u << 1,
   LUTEZ_EXT_WIKILINKS       = 1u << 2,
   LUTEZ_EXT_TAGS            = 1u << 3,
-  LUTEZ_EXT_OUTLINER_BLOCKS = 1u << 4
+  LUTEZ_EXT_OUTLINER_BLOCKS = 1u << 4,
+  LUTEZ_EXT_OUTLINER_KEYWORDS = 1u << 5
 };
 
 /* Same as lutez_parse, with optional dialect presets (LUTEZ_EXT_* bits).

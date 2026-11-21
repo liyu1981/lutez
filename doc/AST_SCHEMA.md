@@ -125,12 +125,12 @@ These nodes exist only when an extension preset is enabled (`lutez_parse_presets
 | # | Type string | Payload / kind |
 |---:|---|---|
 | 500 | `NodeBlockExtension` | block leaf: frontmatter (kind 4), Logseq property (kind 5), fenced math (kind 1) |
-| 501 | `NodeInlineExtension` | inline leaf: math (kind 1), wikilink (kind 2), tag (kind 3), Obsidian block ID (kind 6) |
+| 501 | `NodeInlineExtension` | inline leaf: math (kind 1), wikilink (kind 2), tag (kind 3), Obsidian block ID (kind 6), Logseq task keyword (kind 7) |
 
 The node's **tokens are the raw payload**; the source span includes delimiters/prefix.
 The `ext` blob is `{u32 kind, u16 flags, u8 payload_version=1, u8 reserved}`. Kind ids are
 public and frozen: 1 math, 2 wikilink, 3 tag, 4 frontmatter, 5 Logseq property, 6 Obsidian
-block ID. Flags: bit 0 display math, bit 1 block math. Extension nodes are leaves.
+block ID, 7 Logseq task keyword (`TODO`/`DOING`). Flags: bit 0 display math, bit 1 block math. Extension nodes are leaves.
 
 **Not whitelisted** (must never be constructed): emoji 200–203, math 300–307,
 VditorCaret 405, footnotes 410–412, ToC 415, HeadingID 420, YAML 425–428,

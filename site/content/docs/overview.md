@@ -49,7 +49,7 @@ The in-memory tree uses pointer links into a per-document arena; the serialized 
 | Live differential (Go oracle ↔ C ABI) | **652/652** |
 | HTML oracle (upstream renderer over our AST) | **652/652** byte-identical |
 | Spec-corpus parse time | **0.91 ms** vs 3.54 ms upstream Go |
-| WASM artifact | **243,408 B**, zero imports |
+| WASM artifact | **243,720 B**, zero imports |
 
 Measurements and commands live in [benchmarks](./benchmarks.md).
 
@@ -67,7 +67,8 @@ Measurements and commands live in [benchmarks](./benchmarks.md).
 ## Optional extensions
 
 lutez can parse the opal_note dialect (frontmatter, `$…$`/`$$…$$` math, `[[wikilinks]]`,
-`#tags`, Logseq `key::` properties and Obsidian `^block-id`) through **presets**. They are
+`#tags`, Logseq `key::` properties, `TODO`/`DOING` task keywords and Obsidian `^block-id`)
+through **presets**. They are
 off by default; enabling them never changes the core CM/GFM AST. Extension nodes are
 `NodeBlockExtension`/`NodeInlineExtension` with raw payloads and source spans; see
 [`Extensions`](./extensions.html) in the repository.

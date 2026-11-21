@@ -96,7 +96,7 @@ u8  reserved (= 0)
 ```
 
 Kind registry: 1 math, 2 wikilink, 3 tag, 4 frontmatter, 5 Logseq property, 6 Obsidian
-block ID. Extension nodes are leaves. The header `has_extensions` flag lets older readers
+block ID, 7 Logseq task keyword (`TODO`/`DOING`). Extension nodes are leaves. The header `has_extensions` flag lets older readers
 reject an extension AST early. See `AST_SCHEMA.md` §2.4.
 
 Node `0` is always the `NodeDocument` root (`parent == prev == next == 0xFFFFFFFF`).

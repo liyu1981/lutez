@@ -1,6 +1,6 @@
 # Extension engine — research and recommended design
 
-**Status:** implemented in **lutez 0.3.0** (types 500/501, five presets, preset ABI).
+**Status:** implemented in **lutez 0.3.0** (types 500/501, six presets, preset ABI).
 The public binary-spec builder (adopter-defined rules) remains planned for 0.4. This
 document records the design and the agreed decisions; the original gap (type ≥ 500
 rejected, no preset ABI) is closed for presets.
@@ -62,7 +62,7 @@ and changing the scope of `lutez_parse` (the default entry point).
 | D. Data-driven rule spec + generic extension node | Four rule families cover the dialect and most future lexical constructs | High: no host code, deterministic | 5–7 w | **Recommended** |
 | E. Full pluggable parser (token stream + external AST builder) | Unlimited | Medium | 3–4 months | Overkill; breaks Lute AST shape and parity investment |
 
-Recommendation: **D**, with the opal_note dialect (six kinds under five presets)
+Recommendation: **D**, with the opal_note dialect (seven kinds under six presets)
 implemented on the same rule engine (dogfooding). Keep callbacks out of the public parser.
 
 ---
@@ -92,8 +92,9 @@ block phase              inline phase
 ### 4.1 Extension node
 
 - Add **two** whitelisted types sharing one payload/kind registry:
-  - **`NodeBlockExtension` = 500** — frontmatter, Logseq keyword lines (block leaves),
-  - **`NodeInlineExtension` = 501** — math, wikilinks, tags (inline leaves).
+  - **`NodeBlockExtension` = 500** — frontmatter, Logseq property lines (block leaves),
+  - **`NodeInlineExtension` = 501** — math, wikilinks, tags, Obsidian block IDs,
+    Logseq task keywords (inline leaves).
 
   Two types keep `isBlock`/`CanContain`/`acceptLines` unambiguous. Using a single type 500
   with a “block” flag was considered; it would force core predicates to consult extension
@@ -105,9 +106,9 @@ block phase              inline phase
 - Extras blob for both extension types:
   ```
   u32 kind
+  u16 flags            // e.g. display math / block math
   u8  payload_version (= 1)
-  u8  flags            // e.g. delimiter-excluded, display math
-  u16 reserved
+  u8  reserved
   ```
   Payload bytes are not duplicated: `tokens` carries them.
 - Kind registry (public ABI, freeze in schema):
@@ -119,6 +120,7 @@ block phase              inline phase
   | 4 | frontmatter | YAML body without the `---` fences |
   | 5 | Logseq property | `key:: value` line content (consumers split at `::`) |
   | 6 | Obsidian block ID | trailing `^key` marker content (key only) |
+  | 7 | Logseq task keyword | `TODO` or `DOING` (leading marker only) |
   | 1000+ | adopter-defined (0.4+) | raw payload |
 - Built-in payloads stay **raw text**: no YAML parser, no wikilink target/alias split in
   core, no tag normalization. JS/C helpers can offer convenience parsers later. This keeps
@@ -267,7 +269,8 @@ The built-ins are **presets**, not special cases in the parser:
 | Math (inline) | `inline_delimited` | `$…$` and `$$…$$` on one line; no newline; opening `$` not followed by space; closing `$` not preceded by space; escape `\`; payload excludes delimiters |
 | Math (block) | `block_delimited` | a line containing only `$$` opens, the next line containing only `$$` closes; applies inside containers; payload raw between fences; span includes fences |
 | Wikilink | `inline_delimited` | `[[…]]`; no nested `[[`; no newline; payload excludes brackets; `target|alias` left raw |
-| Tag | `inline_prefix` | `#` + Unicode letter/digit/`_-/`; min 1; not all digits; before not letter/digit/`_` or URL-ish `/.:`; payload excludes `#` |
+| Tag | `inline_prefix` | `#` + Unicode letter/digit/`_-/`; min 1; max 64 chars; not all digits; `.` terminates; before not letter/digit/`_`/`#` or URL-ish `/.:`; closing punctuation such as `)` is allowed; payload excludes `#` |
+| Logseq task keyword | `inline_prefix` + `block_start` | leading `TODO`/`DOING` followed by whitespace or end, in a block's first paragraph; payload is the keyword; span includes it |
 
 Preset mapping:
 
@@ -278,6 +281,7 @@ Preset mapping:
 | `LUTEZ_EXT_WIKILINKS` | kind 2, inline `[[…]]` |
 | `LUTEZ_EXT_TAGS` | kind 3, inline `#tag` |
 | `LUTEZ_EXT_OUTLINER_BLOCKS` | kind 5 `key::` + kind 6 trailing `^block-id` |
+| `LUTEZ_EXT_OUTLINER_KEYWORDS` | kind 7 leading `TODO`/`DOING` in a block's paragraph |
 
 `LUTEZ_EXT_*` preset mask / JS `{ presets: ["opal-note"] }` expands to these rules.
 0.3 ships presets only; the public binary-spec builder is deferred to 0.4 (the internal
@@ -331,7 +335,7 @@ or link them; ABI 3 makes the capability explicit. (Alternative considered: `for
    recorded.
 7. **Editor scenarios**: tag/math/wikilink ranges, frontmatter block range, Logseq line
    numbers, deep links; CRLF/BOM raw offsets.
-8. **Cross-check with a reference scanner** (Go/Python) for the five presets (six kinds)
+8. **Cross-check with a reference scanner** (Go/Python) for the six presets (seven kinds)
    against a hand-written dialect fixture set; no upstream oracle exists for these
    constructs.
 
@@ -341,12 +345,12 @@ or link them; ABI 3 makes the capability explicit. (Alternative considered: `for
 
 | Phase | Work | Estimate |
 |---|---|---:|
-| E0 | Freeze schema: block/inline extension types, kind registry (six kinds), five-preset mask, wire flags, scope note | 3–4 d |
+| E0 | Freeze schema: block/inline extension types, kind registry (seven kinds), six-preset mask, wire flags, scope note | 3–4 d |
 | E1 | Wire/ABI/JS/Go plumbing: types 500/501, ext kind accessors, `lutez_parse_presets`, `has_extensions`, empty-mask no-op | 5–6 d |
 | E2 | Internal rule engine + preset rule tables + validation/limits | 4–5 d |
 | E3 | Block rules: frontmatter (`---`/`...`, EOF), Logseq `key::`, fenced `$$` math; container contexts + spans | 4–5 d |
 | E4 | Inline rules: `$…$`/`$$…$$`, `[[…]]`, `#tag`, trailing `^block-id`; triggers, boundaries, contexts + spans | 7–9 d |
-| E5 | Five presets (six kinds) + extension corpus + C/JS demos | 6–8 d |
+| E5 | Six presets (seven kinds) + extension corpus + C/JS demos | 6–8 d |
 | E6 | Docs, fuzz, perf, release 0.3 | 4–5 d |
 | **Total** | | **~6–7 eng-weeks** |
 
@@ -384,9 +388,10 @@ Agreed:
    line may have trailing spaces/tabs, and the payload is the raw text between the fence
    lines (including body newlines).
 2. **Logseq + Obsidian block syntax** — support Logseq property lines `key:: value`
-   (block extension kind 5) **and** Obsidian block IDs `^key` (inline extension kind 6,
+   (block extension kind 5), Obsidian block IDs `^key` (inline extension kind 6,
    trailing marker at the end of a paragraph/heading/list-item block, key
-   `[A-Za-z0-9-]+`).
+   `[A-Za-z0-9-]+`), and Logseq task keywords `TODO`/`DOING` (inline extension kind 7,
+   leading marker at the start of a block's first paragraph).
 3. **Extension contexts** — inline rules run in all inline contexts by default: paragraphs,
    headings, table cells, link text, image alt, emphasis/strong/strikethrough content.
    They never run in code spans/blocks, inline/block HTML, autolinks, link
@@ -399,9 +404,9 @@ Agreed:
    to the consumer.
 6. **Payload** — raw bytes only, no TLV fields in 0.3. Kind-specific conventions are
    documented; consumers split `::`, `|`, YAML, etc.
-7. **Scope of 0.3** — the five presets first: frontmatter, math, wikilink, tag, and
+7. **Scope of 0.3** — the original five presets: frontmatter, math, wikilink, tag, and
    outliner blocks (Logseq `key::` + Obsidian `^block-id`; two kinds under one preset
-   bit). The public binary-spec builder and adopter-defined rules move to 0.4; the
+   bit), plus the outliner-keyword preset for `TODO`/`DOING`. The public binary-spec builder and adopter-defined rules move to 0.4; the
    internal engine is already rule-driven.
 8. **ABI** — may change: release 0.3.0 with C ABI **3**; `lutez_opts` remains 16 bytes;
    preset APIs are additive; updated decoders are acceptable.

@@ -33,6 +33,7 @@ export type PresetName =
   | "wikilinks"
   | "tags"
   | "outlinerBlocks"
+  | "outlinerKeywords"
   | "opal-note";
 
 export type Extensions =

@@ -85,6 +85,8 @@ fn tryWikiLink(allocator: std.mem.Allocator, ctx: *delim.InlineContext) !?*node.
     return null;
 }
 
+const max_tag_chars = 64;
+
 fn tryTag(allocator: std.mem.Allocator, ctx: *delim.InlineContext) !?*node.Node {
     const start = ctx.pos;
     if (start > 0) {
@@ -99,6 +101,7 @@ fn tryTag(allocator: std.mem.Allocator, ctx: *delim.InlineContext) !?*node.Node 
         if (uni.isLetter(d.r) or uni.isDigit(d.r) or d.r == '_' or d.r == '-' or d.r == '/') {
             if (!uni.isDigit(d.r)) all_digits = false;
             chars += 1;
+            if (chars > max_tag_chars) return null;
             i += d.len;
             continue;
         }
@@ -106,6 +109,16 @@ fn tryTag(allocator: std.mem.Allocator, ctx: *delim.InlineContext) !?*node.Node 
     }
     if (chars == 0 or all_digits) return null;
     return try finish(allocator, ctx, .inline_extension, types.ExtensionKind.tag, 0, start, i, start + 1, i);
+}
+
+/// Logseq TODO/DOING keyword at the start of a block's first paragraph.
+pub fn leadingOutlinerKeyword(tokens: []const u8) ?usize {
+    const keywords = [_][]const u8{ "TODO", "DOING" };
+    for (keywords) |kw| {
+        if (tokens.len < kw.len or !std.mem.eql(u8, tokens[0..kw.len], kw)) continue;
+        if (tokens.len == kw.len or lex.isWhitespace(tokens[kw.len])) return kw.len;
+    }
+    return null;
 }
 
 fn tryObsidianBlockId(allocator: std.mem.Allocator, ctx: *delim.InlineContext) !?*node.Node {

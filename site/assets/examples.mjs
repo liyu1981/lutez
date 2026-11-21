@@ -104,6 +104,8 @@ A [[wikilink|with alias]] and #topic/subtopic.
 
 ^block-42
 
+- TODO first task
+- DOING second task
 - outliner:: value
 - another:: property
 

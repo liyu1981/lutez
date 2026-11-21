@@ -122,7 +122,7 @@ test "preset mask 0 leaves extension syntax as text" {
 }
 
 test "wire v2 preserves extension kinds and payloads" {
-    const md = "---\na: 1\n...\n$x$ [[w]] #tag ^id\n";
+    const md = "---\na: 1\n...\n$x$ [[w]] #tag ^id\n\nTODO task\n";
     var doc = try parseMask(md, types.ExtensionMask.all);
     defer doc.deinit();
     const wire = try @import("ast/wire.zig").encode(std.testing.allocator, doc.root, &.{}, doc.source_map);
@@ -145,6 +145,7 @@ test "wire v2 preserves extension kinds and payloads" {
     try std.testing.expectEqual(@as(usize, 1), kinds.get(2).?); // wikilink
     try std.testing.expectEqual(@as(usize, 1), kinds.get(3).?); // tag
     try std.testing.expectEqual(@as(usize, 1), kinds.get(6).?); // obsidian block id
+    try std.testing.expectEqual(@as(usize, 1), kinds.get(7).?); // outliner keyword
 }
 
 test "tags do not split URL fragments and survive merge" {
@@ -172,6 +173,73 @@ test "tags are allowed in link text and math in emphasis" {
     defer doc.deinit();
     try std.testing.expect((try firstExt(std.testing.allocator, doc.root, 3)) != null);
     try std.testing.expect((try firstExt(std.testing.allocator, doc.root, 1)) != null);
+}
+
+test "tag boundary allows a closing paren, rejects digits and stops at dots" {
+    const md = ")#hg #123 #a.b\n";
+    var doc = try parseMask(md, types.ExtensionMask.tags);
+    defer doc.deinit();
+    var nodes = try collect(std.testing.allocator, doc.root);
+    defer nodes.deinit(std.testing.allocator);
+    var tags: usize = 0;
+    var saw_hg = false;
+    var saw_a = false;
+    for (nodes.items) |n| {
+        if (n.typ == .inline_extension and n.ext_kind == types.ExtensionKind.tag) {
+            tags += 1;
+            if (std.mem.eql(u8, n.tokens, "hg")) saw_hg = true;
+            if (std.mem.eql(u8, n.tokens, "a")) saw_a = true;
+            try std.testing.expect(!std.mem.eql(u8, n.tokens, "123"));
+        }
+    }
+    try std.testing.expectEqual(@as(usize, 2), tags);
+    try std.testing.expect(saw_hg and saw_a);
+}
+
+test "tags are capped at 64 characters" {
+    var ok_buf: [66]u8 = undefined;
+    ok_buf[0] = '#';
+    @memset(ok_buf[1..65], 'a');
+    ok_buf[65] = '\n';
+    var ok_doc = try parseMask(&ok_buf, types.ExtensionMask.tags);
+    defer ok_doc.deinit();
+    const ok = (try firstExt(std.testing.allocator, ok_doc.root, types.ExtensionKind.tag)).?;
+    try std.testing.expectEqual(@as(usize, 64), ok.tokens.len);
+
+    var bad_buf: [67]u8 = undefined;
+    bad_buf[0] = '#';
+    @memset(bad_buf[1..66], 'a');
+    bad_buf[66] = '\n';
+    var bad_doc = try parseMask(&bad_buf, types.ExtensionMask.tags);
+    defer bad_doc.deinit();
+    try std.testing.expect((try firstExt(std.testing.allocator, bad_doc.root, types.ExtensionKind.tag)) == null);
+}
+
+test "logseq TODO and DOING keywords start a paragraph" {
+    const md = "TODO task\n\nDOING other\n\n# TODO heading\n\nx TODO text\n";
+    var doc = try parseMask(md, types.ExtensionMask.outliner_keywords);
+    defer doc.deinit();
+    var nodes = try collect(std.testing.allocator, doc.root);
+    defer nodes.deinit(std.testing.allocator);
+    var keywords: usize = 0;
+    var saw_todo = false;
+    var saw_doing = false;
+    for (nodes.items) |n| {
+        if (n.typ == .inline_extension and n.ext_kind == types.ExtensionKind.outliner_keyword) {
+            keywords += 1;
+            if (std.mem.eql(u8, n.tokens, "TODO")) saw_todo = true;
+            if (std.mem.eql(u8, n.tokens, "DOING")) saw_doing = true;
+        }
+    }
+    try std.testing.expectEqual(@as(usize, 2), keywords);
+    try std.testing.expect(saw_todo and saw_doing);
+}
+
+test "outliner keywords stay off without their preset bit" {
+    const md = "- TODO task\n";
+    var doc = try parseMask(md, types.ExtensionMask.outliner_blocks);
+    defer doc.deinit();
+    try std.testing.expect((try firstExt(std.testing.allocator, doc.root, types.ExtensionKind.outliner_keyword)) == null);
 }
 
 test "hash runs before a tag are not tag starts" {

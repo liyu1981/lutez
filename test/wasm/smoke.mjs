@@ -40,7 +40,7 @@ if (bom.nodeType(1) !== 7) throw new Error(`BOM should be stripped, first child 
 if (bom.span(1)?.[0] !== 3) throw new Error(`BOM list span should start at raw 3, got ${bom.span(1)}`);
 bom.free();
 
-const ext = lutez.parse("---\na: 1\n...\n#tag $x$ [[w]]\n", null, ["opal-note"]);
+const ext = lutez.parse("---\na: 1\n...\n#tag $x$ [[w]]\n\nTODO task\n", null, ["opal-note"]);
 if (ext.nodeType(1) !== 500) throw new Error(`frontmatter node type ${ext.nodeType(1)}`);
 if (ext.extension(1)?.kind !== 4) throw new Error(`frontmatter kind ${JSON.stringify(ext.extension(1))}`);
 if (ext.nodeType(2) !== 1) throw new Error(`body paragraph type ${ext.nodeType(2)}`);
@@ -50,6 +50,11 @@ for (let i = 0; i < ext.nodeCount(); i++) {
   if (e?.kind === 3) foundTag = true;
 }
 if (!foundTag) throw new Error("tag extension missing");
+let foundTodo = false;
+for (let i = 0; i < ext.nodeCount(); i++) {
+  if (ext.extension(i)?.kind === 7) foundTodo = true;
+}
+if (!foundTodo) throw new Error("TODO keyword extension missing");
 ext.free();
 
 console.log(

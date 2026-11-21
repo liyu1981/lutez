@@ -30,10 +30,11 @@ Build: `zig build` → `zig-out/lib/liblutez.a`, `liblutez.so`, `include/lutez.h
 Dialect constructs are opt-in and never affect the default AST:
 
 ```c
-/* frontmatter, math, wikilinks, tags, Logseq/Obsidian blocks */
+/* frontmatter, math, wikilinks, tags, Logseq/Obsidian blocks, TODO/DOING */
 lutez_doc *doc = lutez_parse_presets(md, len, NULL, LUTEZ_EXT_FRONTMATTER |
                                     LUTEZ_EXT_MATH | LUTEZ_EXT_WIKILINKS |
-                                    LUTEZ_EXT_TAGS | LUTEZ_EXT_OUTLINER_BLOCKS);
+                                    LUTEZ_EXT_TAGS | LUTEZ_EXT_OUTLINER_BLOCKS |
+                                    LUTEZ_EXT_OUTLINER_KEYWORDS);
 ```
 
 ```js

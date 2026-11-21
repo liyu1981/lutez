@@ -2,7 +2,7 @@
 
 **Status:** **P1–P3 implemented in lutez 0.2.0** (source spans in the AST, wire v2 and
 ABI v2). **0.3.0 adds P4–P6:** extension node types, five presets (frontmatter, math,
-wikilinks, tags, Logseq/Obsidian blocks) and the preset ABI. The public binary-spec
+wikilinks, tags, Logseq/Obsidian blocks) plus Logseq task keywords, and the preset ABI. The public binary-spec
 builder remains planned for 0.4; see [`EXTENSIONS_DESIGN.md`](./EXTENSIONS_DESIGN.md). Inputs:
 opal_note integration review and the current `lutez` implementation. This document
 evaluates the two blockers and proposes a path; §2 is now historical design context.
@@ -308,10 +308,11 @@ raw bytes
 | Math | 1 | off | `$$…$$`, `$…$`; no newline for inline; block `$$` accepted; escapes; not in code/HTML; payload raw |
 | Wikilink | 2 | off | `[[…]]`; no nested `[[`; payload raw; optional `target|alias` split exposed as separate payload fields in a future payload revision; span includes brackets |
 | Tag | 3 | off | `#` + Unicode alnum/`_-/`; boundary before not alnum/underscore; not after `\`; excludes code/HTML/link content; span includes `#` |
-| Logseq keyword | 5 | off | `^[A-Za-z][\w-]*::\s*`; optional key whitelist; payload key + value; span includes key and `::` |
+| Logseq property | 5 | off | `^[A-Za-z][\w-]*::\s*`; optional key whitelist; payload key + value; span includes key and `::` |
+| Logseq task keyword | 7 | off | leading `TODO`/`DOING` in a block's first paragraph; payload is the keyword |
 
 Each rule is defined *in the spec*, not hard-coded, so adopters can tweak chars/delimiters
-without a fork. The five built-ins are compiled-in presets.
+without a fork. The six built-ins are compiled-in presets.
 
 ### 3.8 Tests and effort
 

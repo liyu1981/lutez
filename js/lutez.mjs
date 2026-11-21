@@ -191,7 +191,8 @@ export const PRESETS = {
   wikilinks: 1 << 2,
   tags: 1 << 3,
   outlinerBlocks: 1 << 4,
-  "opal-note": (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4),
+  outlinerKeywords: 1 << 5,
+  "opal-note": (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5),
 };
 
 function presetMask(extensions) {

@@ -47,6 +47,16 @@ fn walkParseInline(t: *tree.Tree, n: *node.Node) !void {
             .token_map = n.token_map,
             .extensions = t.context.options.extensions,
         };
+        if (typ == .paragraph and t.context.options.extensions & types.ExtensionMask.outliner_keywords != 0) {
+            if (extensions.leadingOutlinerKeyword(n.tokens)) |kw_len| {
+                const ext = try node.Node.create(t.allocator, .inline_extension);
+                ext.ext_kind = types.ExtensionKind.outliner_keyword;
+                ext.tokens = n.tokens[0..kw_len];
+                ictx.setSpanFor(ext, 0, kw_len);
+                n.appendChild(ext);
+                ictx.pos = kw_len;
+            }
+        }
         try parseInline(t, n, &ictx);
         try delim.processEmphasis(.{ .allocator = t.allocator, .options = t.context.options, .ictx = &ictx }, null);
         assignInlineSpans(&ictx, n);
