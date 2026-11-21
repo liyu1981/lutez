@@ -38,6 +38,7 @@ export function renderDemo() {
           <button class="tab" role="tab" aria-selected="false" data-view="json">AST JSON</button>
         </div>
         <div class="panel-actions">
+          <button class="btn btn-small" id="toggle-spans" type="button" aria-pressed="true">Spans on</button>
           <button class="btn btn-small" id="expand-all" type="button">Expand</button>
           <button class="btn btn-small" id="collapse-all" type="button">Collapse</button>
           <button class="btn btn-small" id="copy-json" type="button">Copy JSON</button>

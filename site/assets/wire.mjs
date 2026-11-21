@@ -225,7 +225,8 @@ export function decodeAst(bytes) {
 export function toJSON(decoded) {
   const walk = (i) => {
     const n = decoded.nodes[i];
-    const out = { type: n.name };
+    const out = { type: n.name, span: n.raw, normSpan: n.norm };
+    if (n.derived) out.derived = true;
     if (n.tokens) out.tokens = n.tokens;
     if (Object.keys(n.fields).length) out.fields = n.fields;
     if (n.children.length) out.children = n.children.map(walk);

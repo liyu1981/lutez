@@ -346,6 +346,8 @@ html[data-theme="light"] .btn-primary { color: #fff; }
 .node-children.is-collapsed { display: none; }
 .tree-error { color: var(--bad); font: 12px/1.6 var(--mono); padding: 16px; white-space: pre-wrap; }
 .node-row:focus-visible { outline: 1px solid var(--accent); }
+.tree.no-spans .span-chip { display: none; }
+.span-chip { color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 25%, var(--line)); }
 
 /* ---- responsive ---- */
 @media (max-width: 1100px) {

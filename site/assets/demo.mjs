@@ -71,8 +71,10 @@ function nodeRow(node) {
   if (hasChildren) row.setAttribute("aria-expanded", String(expanded));
   if (state.selected === node.index) row.classList.add("is-selected");
   const token = node.tokens ? node.tokens.replace(/\n/g, "⏎").slice(0, 120) : "";
+  const span = node.derived ? `@${node.raw[0]}~` : `@${node.raw[0]}-${node.raw[1]}`;
   row.innerHTML = `<span class="twisty${hasChildren ? "" : " spacer"}">${hasChildren ? (expanded ? "▾" : "▸") : "·"}</span>
     <span class="badge b-${node.kind}">${escapeHtml(node.name)}</span>
+    <span class="field-chip span-chip" title="raw bytes [${node.raw[0]}, ${node.raw[1]})">${span}</span>
     ${token ? `<span class="token" title="${escapeHtml(node.tokens.slice(0, 2000))}">${escapeHtml(token)}</span>` : `<span class="token empty">—</span>`}
     ${fieldChips(node.fields)}`;
   return row;
@@ -115,6 +117,7 @@ function renderInspector() {
     ["depth", node.depth],
     ["children", node.children.length],
     ["span", `${node.raw[0]}..${node.raw[1]}${node.derived ? " (derived)" : ""}`],
+    ["norm span", `${node.norm[0]}..${node.norm[1]}`],
     ["tokens", node.tokens || "—"],
     ...Object.entries(node.fields).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : String(v)]),
   ];
@@ -269,6 +272,12 @@ async function boot() {
   $("expand-all").addEventListener("click", expandAll);
   $("collapse-all").addEventListener("click", collapseAll);
   $("reset").addEventListener("click", () => setExample(state.active, false));
+  const spanToggle = $("toggle-spans");
+  spanToggle.addEventListener("click", () => {
+    const on = treeEl.classList.toggle("no-spans");
+    spanToggle.setAttribute("aria-pressed", String(!on));
+    spanToggle.textContent = on ? "Spans" : "Spans on";
+  });
   $("copy-json").addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(state.json || "");

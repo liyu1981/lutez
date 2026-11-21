@@ -6,7 +6,7 @@ import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { marked } from "marked";
 import { site, docs, docGroups } from "./config.mjs";
-import { page, docsLayout, esc } from "./templates/layout.mjs";
+import { page, docsLayout, esc, setVersion } from "./templates/layout.mjs";
 import { renderLanding } from "./pages/index.mjs";
 import { renderDemo } from "./pages/demo.mjs";
 import { renderNotFound } from "./pages/notfound.mjs";
@@ -19,6 +19,7 @@ const wasmSrc = join(repo, "zig-out/lib/lutez.wasm");
 
 const read = (p) => readFileSync(join(here, p), "utf8");
 const version = (readFileSync(join(repo, "build.zig.zon"), "utf8").match(/\.version\s*=\s*"([^"]+)"/) || [])[1] || "0.1.0";
+setVersion(version);
 const upstreamSha = (readFileSync(join(repo, "src/types.zig"), "utf8").match(/upstream_sha\s*=\s*"([0-9a-f]{40})"/) || [])[1] || "";
 
 if (!skipZig) {

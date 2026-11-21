@@ -1,5 +1,10 @@
 import { site } from "../config.mjs";
 
+let siteVersion = "0.2";
+export function setVersion(v) {
+  siteVersion = String(v || "0.2");
+}
+
 export const esc = (s) =>
   String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -28,7 +33,7 @@ export function topnav({ depth = 0, active = "" } = {}) {
     : "";
   return `<header class="topbar">
   <div class="topbar-inner">
-    <a class="brand" href="${rel}index.html" aria-label="lutez home">${logo}<span>lutez</span><span class="brand-tag">v0.1</span></a>
+    <a class="brand" href="${rel}index.html" aria-label="lutez home">${logo}<span>lutez</span><span class="brand-tag">v${siteVersion}</span></a>
     <nav class="nav" aria-label="Main">${links}${repo}</nav>
     <div class="topbar-actions">
       <button class="icon-btn theme-toggle" type="button" aria-label="Toggle color theme" title="Toggle theme">

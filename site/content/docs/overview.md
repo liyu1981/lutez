@@ -67,4 +67,5 @@ Measurements and commands live in [benchmarks](./benchmarks.md).
 
 - [Getting started](./getting-started.md) — build and call the library.
 - [ABI guide](./abi.md) — ownership, errors, options and accessors.
-- [Live demo](../demo/) — edit Markdown and inspect the parsed tree.
+- [Live demo](../demo/) — edit Markdown, inspect the parsed tree, and see raw source spans
+  (`@start-end`) on every node; toggle them in the playground toolbar.

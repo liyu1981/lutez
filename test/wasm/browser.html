@@ -23,7 +23,9 @@
       const magic = new TextDecoder().decode(ast.slice(0, 8));
       if (magic !== "LUTEAST1") throw new Error(`bad magic ${magic}`);
       status.textContent = `ok — lutez ${lutez.version}, abi ${lutez.abiVersion}, ${doc.nodeCount()} nodes, ${ast.length} AST bytes`;
-      out.textContent = `magic=${magic}\nnodeCount=${doc.nodeCount()}\nrootType=${doc.nodeType(0)}`;
+      const rootSpan = doc.span(0);
+      const headingSpan = doc.span(1);
+      out.textContent = `magic=${magic}\nnodeCount=${doc.nodeCount()}\nrootType=${doc.nodeType(0)}\nrootSpan=${rootSpan}\nheadingSpan=${headingSpan}`;
       doc.free();
     } catch (e) {
       status.textContent = `failed: ${e.message}`;
