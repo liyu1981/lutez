@@ -43,6 +43,30 @@ jobs:
       - run: zig build wasm
       - run: node test/wasm/smoke.mjs
 
+  site:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.4.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: site/pnpm-lock.yaml
+      - run: cd .. && zig build wasm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:fast
+      - run: pnpm check
+      - run: pnpm check:links
+
   dist:
     runs-on: ubuntu-latest
     steps:

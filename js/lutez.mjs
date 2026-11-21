@@ -23,11 +23,18 @@ export class Lutez {
 
   static async load(source) {
     let bytes;
-    if (typeof source === "string" || source instanceof URL) {
-      const { readFile } = await import("node:fs/promises");
-      bytes = await readFile(source);
-    } else if (source instanceof Uint8Array) {
+    if (source instanceof Uint8Array) {
       bytes = source;
+    } else if (typeof source === "string" || source instanceof URL) {
+      const isNode = typeof process !== "undefined" && process.versions?.node;
+      if (isNode) {
+        const { readFile } = await import("node:fs/promises");
+        bytes = await readFile(source);
+      } else {
+        const res = await fetch(source);
+        if (!res.ok) throw new Error(`Lutez.load: fetch failed (${res.status})`);
+        bytes = new Uint8Array(await res.arrayBuffer());
+      }
     } else {
       throw new TypeError("Lutez.load: expected a path, URL, or Uint8Array");
     }

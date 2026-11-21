@@ -22,3 +22,7 @@ node_modules/
 
 # Agent goal state
 .pi/
+
+# Website build output
+site/dist/
+site/node_modules/

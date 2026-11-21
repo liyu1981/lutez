@@ -1,0 +1,22 @@
+{
+  "name": "lutez-site",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Static website for lutez, including a WASM-powered AST demo.",
+  "scripts": {
+    "build": "node build.mjs",
+    "build:fast": "node build.mjs --skip-zig",
+    "dev": "node build.mjs && node serve.mjs",
+    "serve": "node serve.mjs",
+    "check": "node --check build.mjs && node --check serve.mjs && node --check assets/demo.mjs && node --check assets/wire.mjs && node --check assets/site.js",
+    "check:links": "node check-links.mjs"
+  },
+  "dependencies": {
+    "marked": "12.0.2"
+  },
+  "packageManager": "pnpm@12.4.2",
+  "engines": {
+    "node": ">=20"
+  }
+}

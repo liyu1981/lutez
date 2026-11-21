@@ -81,6 +81,27 @@ tools/build-release.sh --targets x86_64-linux-dynamic   # one variant
 `dist/` contains per-target tarballs, the WASM package (`lutez.wasm` + `lutez.mjs`) and
 `SHA256SUMS`; archives are reproducible. See [`doc/RELEASE.md`](doc/RELEASE.md).
 
+## Website
+
+The project site lives in `site/`: a landing page, generated documentation and a
+WASM-powered AST playground. It is a structured static build (no single-page monolith) and
+publishes to GitHub Pages via `.github/workflows/pages.yml`.
+
+```sh
+cd site
+pnpm install
+pnpm dev           # build + serve http://localhost:8080
+pnpm build         # zig build wasm + static site into site/dist
+pnpm check         # syntax check browser JS
+pnpm check:links   # verify internal links
+```
+
+The site toolchain is pinned with pnpm 12.4.2 (`packageManager` in `site/package.json`).
+
+Docs are generated from `site/content/docs/` and `doc/*.md`; the demo decodes the wire AST
+in the browser and renders an interactive tree. Set `LUTEZ_REPO_URL` at build time to enable
+source links and the GitHub nav item.
+
 ## Documentation
 
 | Document | Contents |
@@ -101,6 +122,7 @@ tools/build-release.sh --targets x86_64-linux-dynamic   # one variant
 - `test/` — test roots, fixtures, corpora (`spec.lzc`, `gfm.lzc`), WASM smoke, benchmarks.
 - `parity/` — Go oracle, cgo bridge, corpus generator, schema checker.
 - `tools/` — table generators, submodule helper, release script.
+- `site/` — website source (landing, docs generator, WASM playground) → `site/dist`.
 - `upstream/lute` — pinned git submodule, never edited.
 
 ## License
