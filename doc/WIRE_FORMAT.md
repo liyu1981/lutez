@@ -1,6 +1,6 @@
 # lutez wire format v2
 
-**Status: v2 (lutez 0.2.0).** Governs `lutez_doc_ast()` bytes, the WASM memory view, and
+**Status: v2 (wire layout unchanged in lutez 0.3.0; extension types added).** Governs `lutez_doc_ast()` bytes, the WASM memory view, and
 the committed conformance corpus (`*.lzc`). v1 readers reject v2; see §8 for versioning.
 
 Design constraints (from the feasibility report §5 and §6):
@@ -40,7 +40,7 @@ version needs sections in a different order, `format_version` changes.
 |---:|---:|---|---|
 | 0 | 8 | `magic` | ASCII `LUTEAST1` (no NUL) |
 | 8 | 4 | `format_version` | `2` |
-| 12 | 4 | `flags` | bit 0 must be 1 = little-endian; bits 1–31 reserved, zero |
+| 12 | 4 | `flags` | bit 0 = little-endian; bit 1 = `has_extensions` (an extension node is present); bits 2–31 reserved, zero |
 | 16 | 4 | `node_count` | number of nodes, including the document root (≥ 1) |
 | 20 | 4 | `node_stride` | `56` for v2; readers must require ≥ 56 |
 | 24 | 4 | `input_len` | normalized input bytes |
@@ -82,6 +82,22 @@ contract (editors, deep links, line numbers); normalized offsets match the token
 and the source map. `flags` bit 8 marks **derived** nodes (zero-width span with no source
 bytes, e.g. a synthesized reference-link paren). Node `0` is the `NodeDocument` root and
 spans `[0, raw_len)`.
+
+### 3.1 Extension nodes (types 500/501)
+
+`NodeBlockExtension` (500) and `NodeInlineExtension` (501) carry their raw payload in the
+normal token fields. Their `ext` blob is:
+
+```
+u32 kind
+u16 flags
+u8  payload_version (= 1)
+u8  reserved (= 0)
+```
+
+Kind registry: 1 math, 2 wikilink, 3 tag, 4 frontmatter, 5 Logseq property, 6 Obsidian
+block ID. Extension nodes are leaves. The header `has_extensions` flag lets older readers
+reject an extension AST early. See `AST_SCHEMA.md` §2.4.
 
 Node `0` is always the `NodeDocument` root (`parent == prev == next == 0xFFFFFFFF`).
 Empty tokens and absent ext are both legal.
@@ -195,7 +211,7 @@ WASM (`wasm.zig`):
 - `format_version` increments on any change that a v2 reader cannot ignore:
   node stride change, new required flag semantics, section reordering.
 - Adding a new core node type is a breaking change for consumers that whitelist types;
-  adopter constructs use `NodeExtension` (type 500) and its payload instead.
+  adopter constructs use the extension types 500/501 and their payload instead.
 - `ext` blob changes that only append fields are handled by bumping `format_version`
   (readers reject trailing bytes today). Removing/renaming fields is also a version bump.
 - The C ABI has its own `lutez_opts`/`lutez_doc` version (`LUTEZ_ABI_VERSION`), which

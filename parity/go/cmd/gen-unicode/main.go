@@ -56,6 +56,8 @@ func main() {
 	fmt.Fprintln(f)
 	writeRanges(f, "space_ranges", ranges(func(r rune) bool { return unicode.IsSpace(r) || unicode.Is(unicode.Zs, r) }))
 	writeRanges(f, "control_ranges", ranges(unicode.IsControl))
+	writeRanges(f, "letter_ranges", ranges(unicode.IsLetter))
+	writeRanges(f, "digit_ranges", ranges(unicode.IsDigit))
 	writeRanges(f, "punct_ranges", ranges(unicode.IsPunct))
 	writeRanges(f, "symbol_ranges", ranges(unicode.IsSymbol))
 	writeRanges(f, "quotation_ranges", ranges(func(r rune) bool { return unicode.Is(unicode.Quotation_Mark, r) }))

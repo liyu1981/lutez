@@ -47,6 +47,20 @@ int main(void) {
   assert(lutez_parse((const uint8_t *)md, strlen(md), &opts) == NULL);
   assert(lutez_last_error_code() == LUTEZ_ERR_INVALID_OPTIONS);
 
+  /* Optional dialect presets: frontmatter + tag. */
+  const char *ext_md = "---\ntitle: demo\n...\n#tag\n";
+  lutez_doc *ext = lutez_parse_presets((const uint8_t *)ext_md, strlen(ext_md), NULL,
+                                      LUTEZ_EXT_FRONTMATTER | LUTEZ_EXT_TAGS);
+  assert(ext != NULL);
+  assert(lutez_node_type(ext, 1) == 500);
+  assert(lutez_node_ext_kind(ext, 1) == 4);
+  uint32_t tag_found = 0;
+  for (uint32_t i = 0; i < lutez_node_count(ext); i++) {
+    if (lutez_node_ext_kind(ext, i) == 3) tag_found = 1;
+  }
+  assert(tag_found);
+  lutez_doc_free(ext);
+
   printf("ok\n");
   return 0;
 }

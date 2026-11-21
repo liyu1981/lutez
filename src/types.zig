@@ -6,11 +6,11 @@
 const std = @import("std");
 
 /// Semantic version of the lutez library (not the ported upstream revision).
-pub const version = std.SemanticVersion{ .major = 0, .minor = 2, .patch = 0 };
-pub const version_string = "0.2.0";
+pub const version = std.SemanticVersion{ .major = 0, .minor = 3, .patch = 0 };
+pub const version_string = "0.3.0";
 
 /// C ABI version. Bumped for any binary-incompatible change to include/lutez.h.
-pub const abi_version: u32 = 2;
+pub const abi_version: u32 = 3;
 
 /// Wire-format version of the serialized AST. See doc/WIRE_FORMAT.md.
 pub const wire_format_version: u32 = 2;
@@ -92,6 +92,10 @@ pub const NodeType = enum(u16) {
     backslash = 400,
     backslash_content = 401,
 
+    // Extensions, 500..501 (opt-in presets; see doc/EXTENSIONS_DESIGN.md)
+    block_extension = 500,
+    inline_extension = 501,
+
     _,
 };
 
@@ -159,6 +163,8 @@ pub fn nodeTypeString(t: NodeType) []const u8 {
         .table_cell => "NodeTableCell",
         .backslash => "NodeBackslash",
         .backslash_content => "NodeBackslashContent",
+        .block_extension => "NodeBlockExtension",
+        .inline_extension => "NodeInlineExtension",
         else => "NodeUnknown",
     };
 }
@@ -184,8 +190,36 @@ pub const Options = struct {
     data_image: bool = true,
     /// Strip a UTF-8 BOM at the start of the input (CommonMark-friendly default).
     strip_bom: bool = true,
+    /// Optional extension presets (see `ExtensionMask`); 0 = strict CM/GFM.
+    extensions: u32 = 0,
 
     pub const defaults: Options = .{};
+};
+
+/// Preset bits for opt-in dialect extensions. Kind ids are in `ExtensionKind`.
+pub const ExtensionMask = struct {
+    pub const frontmatter: u32 = 1 << 0;
+    pub const math: u32 = 1 << 1;
+    pub const wiki_links: u32 = 1 << 2;
+    pub const tags: u32 = 1 << 3;
+    pub const outliner_blocks: u32 = 1 << 4;
+
+    pub const all: u32 = frontmatter | math | wiki_links | tags | outliner_blocks;
+};
+
+/// Stable extension kind registry (wire/ABI).
+pub const ExtensionKind = struct {
+    pub const math: u32 = 1;
+    pub const wiki_link: u32 = 2;
+    pub const tag: u32 = 3;
+    pub const frontmatter: u32 = 4;
+    pub const logseq_property: u32 = 5;
+    pub const obsidian_block_id: u32 = 6;
+};
+
+pub const ExtensionFlags = struct {
+    pub const display_math: u16 = 1 << 0;
+    pub const block_math: u16 = 1 << 1;
 };
 
 /// Error codes exposed through the C ABI (`lutez_last_error_code`).
@@ -232,6 +266,16 @@ test "out-of-scope node types are rejected" {
     try std.testing.expectEqual(@as(?NodeType, null), nodeTypeFromInt(300)); // math
     try std.testing.expectEqual(@as(?NodeType, null), nodeTypeFromInt(999));
     try std.testing.expectEqual(NodeType.table_cell, nodeTypeFromInt(109).?);
+}
+
+test "extension node types and kinds are exposed" {
+    try std.testing.expectEqual(@as(u16, 500), @backingInt(NodeType.block_extension));
+    try std.testing.expectEqual(@as(u16, 501), @backingInt(NodeType.inline_extension));
+    try std.testing.expectEqualStrings("NodeBlockExtension", nodeTypeString(.block_extension));
+    try std.testing.expectEqualStrings("NodeInlineExtension", nodeTypeString(.inline_extension));
+    try std.testing.expectEqual(NodeType.inline_extension, nodeTypeFromInt(501).?);
+    try std.testing.expectEqual(@as(u32, 31), ExtensionMask.all);
+    try std.testing.expectEqual(@as(u32, 1), ExtensionKind.math);
 }
 
 test "type strings are the upstream stringer names" {

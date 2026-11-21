@@ -1,7 +1,7 @@
 /*
  * lutez — CommonMark 0.31.2 + GFM parser (Zig port of upstream lute)
  *
- * C ABI v2. Parses CommonMark 0.31.2 + GFM into a versioned binary AST; the
+ * C ABI v3. Parses CommonMark 0.31.2 + GFM into a versioned binary AST; the
  * document owns all memory until lutez_doc_free().
  *
  * Rules:
@@ -25,7 +25,7 @@
 extern "C" {
 #endif
 
-#define LUTEZ_ABI_VERSION 2u
+#define LUTEZ_ABI_VERSION 3u
 #define LUTEZ_WIRE_FORMAT_VERSION 2u
 
 /* Error codes returned by lutez_last_error_code(). */
@@ -72,7 +72,21 @@ uint32_t lutez_wire_format_version(void);
 /* Parse UTF-8 markdown. Returns NULL on failure. The input is copied. */
 lutez_doc *lutez_parse(const uint8_t *md, size_t len, const lutez_opts *opts);
 
-/* Serialized AST (doc/WIRE_FORMAT.md v1). Valid until lutez_doc_free().
+/* Extension presets (0.3). Mask 0 is identical to lutez_parse. */
+enum {
+  LUTEZ_EXT_FRONTMATTER     = 1u << 0,
+  LUTEZ_EXT_MATH            = 1u << 1,
+  LUTEZ_EXT_WIKILINKS       = 1u << 2,
+  LUTEZ_EXT_TAGS            = 1u << 3,
+  LUTEZ_EXT_OUTLINER_BLOCKS = 1u << 4
+};
+
+/* Same as lutez_parse, with optional dialect presets (LUTEZ_EXT_* bits).
+ * presets = 0 is identical to lutez_parse; unknown bits are rejected. */
+lutez_doc *lutez_parse_presets(const uint8_t *md, size_t len,
+                               const lutez_opts *opts, uint32_t presets);
+
+/* Serialized AST (doc/WIRE_FORMAT.md v2). Valid until lutez_doc_free().
  * Returns NULL and sets *out_len = 0 when doc is NULL. */
 const uint8_t *lutez_doc_ast(const lutez_doc *doc, size_t *out_len);
 
@@ -99,6 +113,9 @@ const uint8_t *lutez_node_data(const lutez_doc *doc, uint32_t node, size_t *out_
 int lutez_node_span(const lutez_doc *doc, uint32_t node, uint32_t *out_start, uint32_t *out_end);
 int lutez_node_span_norm(const lutez_doc *doc, uint32_t node, uint32_t *out_start, uint32_t *out_end);
 int lutez_node_span_derived(const lutez_doc *doc, uint32_t node);
+/* Extension nodes (types 500/501): kind or -1, and flags (0 for non-ext). */
+int32_t lutez_node_ext_kind(const lutez_doc *doc, uint32_t node);
+uint32_t lutez_node_ext_flags(const lutez_doc *doc, uint32_t node);
 
 /* ---- errors (thread-local, never NULL) --------------------------------- */
 

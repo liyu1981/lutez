@@ -19,6 +19,15 @@ pub fn isSpace(r: u21) bool {
 pub fn isControl(r: u21) bool {
     return inRanges(&t.control_ranges, r);
 }
+pub fn isLetter(r: u21) bool {
+    return inRanges(&t.letter_ranges, r);
+}
+pub fn isDigit(r: u21) bool {
+    return inRanges(&t.digit_ranges, r);
+}
+pub fn isAlnum(r: u21) bool {
+    return isLetter(r) or isDigit(r);
+}
 pub fn isPunct(r: u21) bool {
     return inRanges(&t.punct_ranges, r);
 }

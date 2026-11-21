@@ -11,6 +11,7 @@ const tree = @import("tree.zig");
 const delim = @import("delimiter.zig");
 const links = @import("links.zig");
 const blocks = @import("blocks.zig");
+const extensions = @import("extensions.zig");
 const source = @import("../source.zig");
 
 pub const InlineContext = delim.InlineContext;
@@ -44,6 +45,7 @@ fn walkParseInline(t: *tree.Tree, n: *node.Node) !void {
             .tokens_len = n.tokens.len,
             .token_buffer = map_buffer,
             .token_map = n.token_map,
+            .extensions = t.context.options.extensions,
         };
         try parseInline(t, n, &ictx);
         try delim.processEmphasis(.{ .allocator = t.allocator, .options = t.context.options, .ictx = &ictx }, null);
@@ -139,6 +141,20 @@ pub fn parseInline(t: *tree.Tree, block: *node.Node, ctx: *InlineContext) !void 
         const start_pos = ctx.pos;
         const tok = ctx.tokens[ctx.pos];
         var n: ?*node.Node = null;
+        if (ctx.extensions != 0 and extensions.isTrigger(ctx.extensions, tok)) {
+            if (try extensions.tryInline(t.allocator, ctx.extensions, ctx)) |ext_node| {
+                block.appendChild(ext_node);
+                continue;
+            }
+            if (!lex.isMarker(tok)) {
+                const text = try node.Node.create(t.allocator, .text);
+                text.tokens = ctx.tokens[ctx.pos .. ctx.pos + 1];
+                ctx.setSpanFor(text, ctx.pos, ctx.pos + 1);
+                ctx.pos += 1;
+                block.appendChild(text);
+                continue;
+            }
+        }
         switch (tok) {
             lex.backslash => n = try parseBackslash(c, block),
             lex.backtick => n = try parseCodeSpan(c, block),
@@ -175,7 +191,7 @@ fn parseText(c: Ctx) !*node.Node {
     const ctx = c.ctx;
     const start = ctx.pos;
     while (ctx.pos < ctx.tokens_len) : (ctx.pos += 1) {
-        if (lex.isMarker(ctx.tokens[ctx.pos])) break;
+        if (lex.isMarker(ctx.tokens[ctx.pos]) or extensions.isTrigger(ctx.extensions, ctx.tokens[ctx.pos])) break;
     }
     const n = try node.Node.create(c.a(), .text);
     n.tokens = ctx.tokens[start..ctx.pos];

@@ -34,6 +34,7 @@ pub const View = struct {
     count: u32,
     stride: u32,
     extras_off: usize,
+    ext_len: u32,
     pool_off: usize,
     pool_len: u32,
 
@@ -51,7 +52,7 @@ pub const View = struct {
         const input_off = (extras_off + ext_len + 7) & ~@as(usize, 7);
         const pool_off = (input_off + input_len + 7) & ~@as(usize, 7);
         if (stride < wire.node_stride or pool_off + pool_len > buf.len) return null;
-        return .{ .buf = buf, .count = count, .stride = stride, .extras_off = extras_off, .pool_off = pool_off, .pool_len = pool_len };
+        return .{ .buf = buf, .count = count, .stride = stride, .extras_off = extras_off, .ext_len = ext_len, .pool_off = pool_off, .pool_len = pool_len };
     }
 
     fn rec(self: View, i: u32) ?[]const u8 {
@@ -73,6 +74,28 @@ pub const View = struct {
             .start = std.mem.readInt(u32, r[off..][0..4], .little),
             .end = std.mem.readInt(u32, r[off + 4 ..][0..4], .little),
         };
+    }
+
+    pub fn extKind(self: View, i: u32) i64 {
+        const r = self.rec(i) orelse return -1;
+        const typ = std.mem.readInt(u16, r[0..2], .little);
+        if (typ != 500 and typ != 501) return -1;
+        const ref = std.mem.readInt(u32, r[48..52], .little);
+        const len = std.mem.readInt(u32, r[52..56], .little);
+        if (ref == 0xFFFFFFFF or len < 8 or ref + len > self.ext_len) return -1;
+        const e = self.buf[self.extras_off + ref .. self.extras_off + ref + len];
+        return std.mem.readInt(u32, e[0..4], .little);
+    }
+
+    pub fn extFlags(self: View, i: u32) u16 {
+        const r = self.rec(i) orelse return 0;
+        const typ = std.mem.readInt(u16, r[0..2], .little);
+        if (typ != 500 and typ != 501) return 0;
+        const ref = std.mem.readInt(u32, r[48..52], .little);
+        const len = std.mem.readInt(u32, r[52..56], .little);
+        if (ref == 0xFFFFFFFF or len < 8 or ref + len > self.ext_len) return 0;
+        const e = self.buf[self.extras_off + ref .. self.extras_off + ref + len];
+        return std.mem.readInt(u16, e[4..6], .little);
     }
 
     pub fn derived(self: View, i: u32) bool {

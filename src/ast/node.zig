@@ -130,6 +130,12 @@ pub const Node = struct {
     link_type: u8 = 0,
     link_ref_label: []u8 = &.{},
 
+    /// Extension nodes (type 500/501). Payload is in `tokens`.
+    ext_kind: u32 = 0,
+    ext_flags: u16 = 0,
+    /// Block extension that accepts continuation lines (fenced block math).
+    ext_accepts_lines: bool = false,
+
     pub fn setSpan(self: *Node, start: u32, end: u32) void {
         self.src_start = start;
         self.src_end = end;
@@ -333,7 +339,7 @@ pub const Node = struct {
 
     pub fn canContain(self: *const Node, t: NodeType) bool {
         return switch (self.typ) {
-            .code_block, .html_block, .paragraph, .thematic_break, .table => false,
+            .code_block, .html_block, .paragraph, .thematic_break, .table, .inline_extension, .block_extension => false,
             .list => t == .list_item,
             else => t != .list_item,
         };
@@ -341,7 +347,7 @@ pub const Node = struct {
 
     pub fn isBlock(self: *const Node) bool {
         return switch (self.typ) {
-            .document, .paragraph, .heading, .thematic_break, .blockquote, .list, .list_item, .html_block, .code_block, .table => true,
+            .document, .paragraph, .heading, .thematic_break, .blockquote, .list, .list_item, .html_block, .code_block, .table, .block_extension => true,
             else => false,
         };
     }
@@ -370,6 +376,7 @@ pub const Node = struct {
     pub fn acceptLines(self: *const Node) bool {
         return switch (self.typ) {
             .paragraph, .code_block, .html_block => true,
+            .block_extension => self.ext_accepts_lines,
             else => false,
         };
     }

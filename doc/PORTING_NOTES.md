@@ -57,6 +57,9 @@ This records intentional differences so reviewers and consumers know what to exp
 - Entity decoding uses the generated 2125-entry table from upstream `html.Entities`
   (semicolon required, matching Lute's `HtmlUnescapeString`).
 - The parser is reentrant and allocation-failure-safe; malformed Markdown never errors.
+- Optional dialect extensions (frontmatter, math, wikilinks, tags, Logseq/Obsidian block
+  markers) are implemented as Lute-independent presets and are not translations of the
+  excluded upstream extensions. Preset mask 0 is byte-identical to the core parser.
 - A leading UTF-8 BOM is stripped by default (`strip_bom` / `stripBom`); setting it off
   keeps the BOM as content. The source map records a zero-width BOM segment so block
   spans still point at the correct raw offsets.

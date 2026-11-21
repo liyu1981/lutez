@@ -70,7 +70,7 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "lutez", .module = lutez_mod }},
         }),
         .linkage = .dynamic,
-        .version = .{ .major = 0, .minor = 2, .patch = 0 },
+        .version = .{ .major = 0, .minor = 3, .patch = 0 },
     });
     shared_lib.installHeader(b.path("include/lutez.h"), "lutez.h");
     b.installArtifact(shared_lib);

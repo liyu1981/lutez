@@ -111,6 +111,10 @@ fn writeNode(allocator: std.mem.Allocator, n: *node_mod.Node, depth: usize, out:
         .code_span => {
             if (n.code_marker_len != 0) try fieldInt(allocator, out, "code_marker_len", n.code_marker_len);
         },
+        .block_extension, .inline_extension => {
+            try fieldInt(allocator, out, "ext_kind", n.ext_kind);
+            if (n.ext_flags != 0) try fieldInt(allocator, out, "ext_flags", n.ext_flags);
+        },
         else => {},
     }
     try out.append(allocator, '\n');

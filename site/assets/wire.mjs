@@ -18,6 +18,7 @@ const NODE_TYPES = {
   103: "Strikethrough1CloseMarker", 104: "Strikethrough2OpenMarker", 105: "Strikethrough2CloseMarker",
   106: "Table", 107: "TableHead", 108: "TableRow", 109: "TableCell",
   400: "Backslash", 401: "BackslashContent",
+  500: "BlockExtension", 501: "InlineExtension",
 };
 
 const KIND_BY_TYPE = new Map();
@@ -32,6 +33,8 @@ for (const t of [31, 32]) KIND_BY_TYPE.set(t, "break");
 for (const t of [400, 401]) KIND_BY_TYPE.set(t, "marker");
 for (const t of [44]) KIND_BY_TYPE.set(t, "entity");
 for (const t of [16, 17, 22, 101]) KIND_BY_TYPE.set(t, "inline");
+KIND_BY_TYPE.set(500, "block");
+KIND_BY_TYPE.set(501, "inline");
 
 const decoder = new TextDecoder("utf-8", { fatal: false });
 const ALIGN = ["default", "left", "center", "right"];
@@ -120,6 +123,16 @@ function decodeExt(node, bytes) {
     case 27: f.codeMarkers = r.u32(); break;
     case 14: { const info = str(r.bytes()); if (info) f.info = info; break; }
     case 12: case 13: f.fenceLen = r.u32(); break;
+    case 500: case 501: {
+      const kind = r.u32();
+      const flags = r.u16();
+      r.u8(); // payload version
+      r.u8(); // reserved
+      node.extension = { kind, flags };
+      f.extKind = kind;
+      if (flags) f.extFlags = flags;
+      break;
+    }
     default: break;
   }
 }
@@ -227,6 +240,7 @@ export function toJSON(decoded) {
     const n = decoded.nodes[i];
     const out = { type: n.name, span: n.raw, normSpan: n.norm };
     if (n.derived) out.derived = true;
+    if (n.extension) out.extension = n.extension;
     if (n.tokens) out.tokens = n.tokens;
     if (Object.keys(n.fields).length) out.fields = n.fields;
     if (n.children.length) out.children = n.children.map(walk);

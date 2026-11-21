@@ -5,9 +5,9 @@ CommonMark 0.31.2 + GFM **parser** in Zig, ported from
 C ABI library, a self-contained WASM module, and a JS wrapper. Rendering is out of scope:
 `lutez` turns Markdown bytes into a versioned binary AST.
 
-> Status: **v0.2.0.** CommonMark **652/652** AST parity, GFM **672/672** (tables,
+> Status: **v0.3.0.** CommonMark **652/652** AST parity, GFM **672/672** (tables,
 > strikethrough, task lists, extended autolinks), live differential **652/652**, HTML oracle
-> **652/652 byte-identical**, 8-thread TSan-clean, WASM **230 KB / zero imports**, parse
+> **652/652 byte-identical**, 8-thread TSan-clean, WASM **243 KB / zero imports**, parse
 > **3.9× faster** than upstream Go on the spec corpus. See
 > [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md) and [`doc/PORTING_NOTES.md`](doc/PORTING_NOTES.md).
 
@@ -24,6 +24,25 @@ lutez_doc_free(doc);
 ```
 
 Build: `zig build` → `zig-out/lib/liblutez.a`, `liblutez.so`, `include/lutez.h`.
+
+### Extensions (optional presets)
+
+Dialect constructs are opt-in and never affect the default AST:
+
+```c
+/* frontmatter, math, wikilinks, tags, Logseq/Obsidian blocks */
+lutez_doc *doc = lutez_parse_presets(md, len, NULL, LUTEZ_EXT_FRONTMATTER |
+                                    LUTEZ_EXT_MATH | LUTEZ_EXT_WIKILINKS |
+                                    LUTEZ_EXT_TAGS | LUTEZ_EXT_OUTLINER_BLOCKS);
+```
+
+```js
+const doc = lutez.parse(md, null, ["opal-note"]);
+doc.extension(node);   // { kind, flags } or null
+```
+
+Extension nodes are `NodeBlockExtension`/`NodeInlineExtension` with raw payloads and
+source spans; see [`doc/EXTENSIONS_DESIGN.md`](doc/EXTENSIONS_DESIGN.md).
 
 ### WASM + JS
 
@@ -113,6 +132,7 @@ source links and the GitHub nav item.
 | [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md) | performance vs Go |
 | [`doc/RELEASE.md`](doc/RELEASE.md) | release checklist and verification |
 | [`doc/PORTING_NOTES.md`](doc/PORTING_NOTES.md) | deviations and known simplifications |
+| [`doc/EXTENSIONS_DESIGN.md`](doc/EXTENSIONS_DESIGN.md) | optional dialect extension presets and payloads |
 | [`doc/UPSTREAM.md`](doc/UPSTREAM.md) | pinned submodule and tag-bump procedure |
 | [`doc/ZIG_PORT_FEASIBILITY.md`](doc/ZIG_PORT_FEASIBILITY.md) | original feasibility study |
 

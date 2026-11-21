@@ -9,7 +9,7 @@ const imports = WebAssembly.Module.imports(module);
 if (imports.length !== 0) throw new Error(`expected zero imports, got ${JSON.stringify(imports)}`);
 
 const lutez = await Lutez.load(bytes);
-if (lutez.abiVersion !== 2) throw new Error(`unexpected ABI ${lutez.abiVersion}`);
+if (lutez.abiVersion !== 3) throw new Error(`unexpected ABI ${lutez.abiVersion}`);
 
 const doc = lutez.parse("# hi *em*\n\n- a\n- b\n");
 const count = doc.nodeCount();
@@ -39,6 +39,18 @@ const bom = lutez.parse("\uFEFF- a\n- b\n");
 if (bom.nodeType(1) !== 7) throw new Error(`BOM should be stripped, first child ${bom.nodeType(1)}`);
 if (bom.span(1)?.[0] !== 3) throw new Error(`BOM list span should start at raw 3, got ${bom.span(1)}`);
 bom.free();
+
+const ext = lutez.parse("---\na: 1\n...\n#tag $x$ [[w]]\n", null, ["opal-note"]);
+if (ext.nodeType(1) !== 500) throw new Error(`frontmatter node type ${ext.nodeType(1)}`);
+if (ext.extension(1)?.kind !== 4) throw new Error(`frontmatter kind ${JSON.stringify(ext.extension(1))}`);
+if (ext.nodeType(2) !== 1) throw new Error(`body paragraph type ${ext.nodeType(2)}`);
+let foundTag = false;
+for (let i = 0; i < ext.nodeCount(); i++) {
+  const e = ext.extension(i);
+  if (e?.kind === 3) foundTag = true;
+}
+if (!foundTag) throw new Error("tag extension missing");
+ext.free();
 
 console.log(
   `wasm ok: ${bytes.length} bytes, 0 imports, abi ${lutez.abiVersion}, v${lutez.version}, nodes ${count}`,

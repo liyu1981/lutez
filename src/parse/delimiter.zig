@@ -32,6 +32,7 @@ pub const InlineContext = struct {
     /// Inline position provenance (see `Node.token_map`).
     token_buffer: []u8 = &.{},
     token_map: []const node.TokenSeg = &.{},
+    extensions: u32 = 0,
 
     pub fn spanFor(self: *InlineContext, start: usize, end: usize) ?node.Span {
         if (start >= end or end > self.tokens.len) return null;

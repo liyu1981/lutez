@@ -23,14 +23,36 @@ export declare class Doc {
   nodeType(node: number): number;
   /** Raw [start, end) byte offsets in the original Markdown, or null. */
   span(node: number): [number, number] | null;
+  extension(node: number): Extension | null;
   free(): void;
+}
+
+export type PresetName =
+  | "frontmatter"
+  | "math"
+  | "wikilinks"
+  | "tags"
+  | "outlinerBlocks"
+  | "opal-note";
+
+export type Extensions =
+  | PresetName
+  | PresetName[]
+  | { presets: PresetName[] }
+  | Partial<Record<PresetName, boolean>>
+  | number;
+
+export interface Extension {
+  kind: number;
+  flags: number;
 }
 
 export declare class Lutez {
   static load(source: string | URL | Uint8Array): Promise<Lutez>;
   readonly abiVersion: number;
   readonly version: string;
-  parse(markdown: string, opts?: LutezOptions | null): Doc;
+  parse(markdown: string, opts?: LutezOptions | null, extensions?: Extensions | null): Doc;
 }
 
+export declare const PRESETS: Record<PresetName, number>;
 export declare const NULL_NODE: number;

@@ -55,6 +55,12 @@ pub fn parse(input: []const u8, options: Options) !Doc {
     return parseWith(default_allocator, input, options);
 }
 
+pub fn parseWithPresets(backing: std.mem.Allocator, input: []const u8, options: Options, presets: u32) !Doc {
+    var parsed_options = options;
+    parsed_options.extensions = presets;
+    return parseWith(backing, input, parsed_options);
+}
+
 pub fn parseWith(backing: std.mem.Allocator, input: []const u8, options: Options) !Doc {
     var arena = std.heap.ArenaAllocator.init(backing);
     errdefer arena.deinit();
@@ -71,6 +77,7 @@ comptime {
     _ = @import("ast/dump.zig");
     _ = @import("source.zig");
     _ = @import("positions.zig");
+    _ = @import("extensions_tests.zig");
     _ = @import("ast/wire.zig");
     _ = @import("doc.zig");
     _ = @import("abi.zig");

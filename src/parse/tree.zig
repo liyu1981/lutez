@@ -181,6 +181,7 @@ pub const Tree = struct {
         const ctx = self.context;
         ctx.tip = self.root;
         self.root.setSpan(0, @intCast(self.input.len));
+        if (ctx.options.extensions & types.ExtensionMask.frontmatter != 0) try self.tryFrontmatter();
         var line_no: u32 = 0;
         while (try self.lexer.nextLine(self.allocator)) |line| {
             const norm_start: u32 = @intCast(@intFromPtr(line.ptr) - @intFromPtr(self.input.ptr));
@@ -199,6 +200,86 @@ pub const Tree = struct {
             self.context.finalize(self.context.tip);
             if (self.context.tip == self.root) break;
         }
+    }
+
+    fn tryOutlinerBlock(self: *Tree, container: *node.Node) !bool {
+        const ctx = self.context;
+        ctx.findNextNonspace();
+        if (ctx.blank or ctx.indented or container.typ == .paragraph) return false;
+        const start_rel = ctx.next_nonspace;
+        const line_body = ctx.current_line[0 .. ctx.line_end_norm - ctx.line_norm_start];
+        if (start_rel >= line_body.len) return false;
+        var i = start_rel;
+        if (!((line_body[i] >= 'A' and line_body[i] <= 'Z') or (line_body[i] >= 'a' and line_body[i] <= 'z'))) return false;
+        i += 1;
+        while (i < line_body.len and (token.isASCIILetterNum(line_body[i]) or line_body[i] == '_' or line_body[i] == '-')) i += 1;
+        if (i + 1 >= line_body.len or line_body[i] != ':' or line_body[i + 1] != ':') return false;
+        const value_start = i + 2;
+        if (value_start < line_body.len and !token.isWhitespace(line_body[value_start])) return false;
+        const trimmed = token.trimRight(line_body[start_rel..]).remains;
+
+        const n = try node.Node.create(self.allocator, .block_extension);
+        n.ext_kind = types.ExtensionKind.logseq_property;
+        n.tokens = @constCast(trimmed);
+        n.close = true;
+        n.setSpan(ctx.line_norm_start + @as(u32, @intCast(start_rel)), ctx.line_norm_start + @as(u32, @intCast(start_rel + trimmed.len)));
+        container.appendChild(n);
+        container.src_end = ctx.line_trimmed_end_norm;
+        var anc: ?*node.Node = container.parent;
+        while (anc) |x| : (anc = x.parent) {
+            switch (x.typ) {
+                .blockquote, .list, .list_item => {
+                    if (container.src_end > x.src_end) x.src_end = container.src_end;
+                },
+                else => {},
+            }
+        }
+        ctx.tip = container;
+        ctx.offset = ctx.current_line_len;
+        return true;
+    }
+
+    fn tryFrontmatter(self: *Tree) !void {
+        const input = self.input;
+        if (input.len < 3) return;
+        const open_end = lineEnd(input, 0);
+        const open_line = token.trimRight(input[0..open_end]).remains;
+        if (!std.mem.eql(u8, open_line, "---")) return;
+
+        var body_start = if (open_end < input.len) open_end + 1 else input.len;
+        var scan = body_start;
+        var close_start: ?usize = null;
+        var close_end: usize = input.len;
+        while (scan < input.len) {
+            const e = lineEnd(input, scan);
+            const line = token.trimRight(input[scan..e]).remains;
+            if (std.mem.eql(u8, line, "---") or std.mem.eql(u8, line, "...")) {
+                close_start = scan;
+                close_end = e;
+                break;
+            }
+            if (e >= input.len) break;
+            scan = e + 1;
+        }
+        const payload_end = close_start orelse input.len;
+        if (body_start > payload_end) body_start = payload_end;
+
+        const n = try node.Node.create(self.allocator, .block_extension);
+        n.ext_kind = types.ExtensionKind.frontmatter;
+        n.tokens = input[body_start..payload_end];
+        n.close = true;
+        if (close_start != null) {
+            n.setSpan(0, @intCast(close_end));
+            self.lexer.offset = if (close_end < input.len) close_end + 1 else input.len;
+        } else {
+            n.setSpan(0, @intCast(input.len));
+            self.lexer.offset = input.len;
+        }
+        self.root.appendChild(n);
+    }
+
+    fn lineEnd(input: []const u8, start: usize) usize {
+        return std.mem.indexOfScalarPos(u8, input, start, '\n') orelse input.len;
     }
 
     pub fn incorporateLine(self: *Tree, line: []u8) !void {
@@ -234,6 +315,9 @@ pub const Tree = struct {
 
         ctx.all_closed = container == ctx.oldtip;
         ctx.last_matched_container = container;
+        if (ctx.options.extensions & types.ExtensionMask.outliner_blocks != 0) {
+            if (try self.tryOutlinerBlock(container)) return;
+        }
         var matched_leaf = container.typ != .paragraph and container.acceptLines();
         const starts = blocks.starts;
 
@@ -245,7 +329,8 @@ pub const Tree = struct {
                 maybe_marker != token.backtick and maybe_marker != token.tilde and
                 maybe_marker != token.crosshatch and maybe_marker != token.greater and
                 maybe_marker != token.less and maybe_marker != token.underscore and
-                maybe_marker != token.equal and maybe_marker != token.open_bracket)
+                maybe_marker != token.equal and maybe_marker != token.open_bracket and
+                maybe_marker != token.dollar)
             {
                 ctx.advanceNextNonspace();
                 break;
@@ -294,6 +379,9 @@ pub const Tree = struct {
                     }
                 }
             } else if (ctx.offset < ctx.current_line_len and !ctx.blank) {
+                if (ctx.options.extensions & types.ExtensionMask.outliner_blocks != 0) {
+                    if (try self.tryOutlinerBlock(container)) return;
+                }
                 const p = try ctx.addChild(.paragraph);
                 ctx.advanceNextNonspace();
                 p.setSpan(ctx.currentAbs(), ctx.line_trimmed_end_norm);
@@ -340,6 +428,7 @@ pub const Tree = struct {
         if (!blank) {
             const end = switch (ctx.tip.typ) {
                 .code_block, .html_block => ctx.line_end_norm,
+                .block_extension => ctx.line_end_norm,
                 else => ctx.line_trimmed_end_norm,
             };
             if (end > ctx.tip.src_start) ctx.tip.src_end = end;

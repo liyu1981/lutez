@@ -30,7 +30,7 @@ Rules:
   free its buffer immediately. `lutez_doc_ast` is valid until `lutez_doc_free`.
 - **Errors.** `NULL`/`0`/`-1` plus `lutez_last_error()` and `lutez_last_error_code()`
   (thread-local). Messages are static storage.
-- **Options.** Versioned struct (`struct_size` first, 16 bytes in ABI v2, `uint8_t`
+- **Options.** Versioned struct (`struct_size` first, 16 bytes in ABI v3, `uint8_t`
   flags). The final byte is `strip_bom` (default 1 when `opts == NULL`; set to 0 to keep
   a leading UTF-8 BOM as content). Unknown trailing bytes are ignored only when
   `struct_size >= sizeof(v2)`; a smaller struct is rejected.
@@ -39,6 +39,9 @@ Rules:
 - **Accessors.** Node handles are `uint32_t` indices (`LUTEZ_NULL_NODE` = absent).
   `lutez_node_data` returns the node's token bytes. Out-of-range nodes yield
   `-1`/`LUTEZ_NULL_NODE`/`NULL`; they never crash.
+- **Extensions.** `lutez_parse_presets(md, len, opts, mask)` opts into dialect presets;
+  mask 0 is identical to `lutez_parse`. `lutez_node_ext_kind`/`_ext_flags` identify
+  extension nodes; the payload is `lutez_node_data`.
 - **Source spans.** `lutez_node_span()` returns raw byte offsets into the caller's original
   Markdown; `lutez_node_span_norm()` returns offsets into the normalized buffer;
   `lutez_node_span_derived()` marks synthesized zero-width nodes. All are half-open
@@ -55,7 +58,7 @@ with raw + normalized spans, extras/input/pool/source-map sections. Offsets are 
 ## WASM
 
 Built with `zig build wasm` → `zig-out/lib/lutez.wasm` (wasm32-freestanding,
-**zero imports**, ~230 KB ReleaseSmall).
+**zero imports**, ~243 KB ReleaseSmall).
 
 Exports:
 
@@ -63,16 +66,19 @@ Exports:
 |---|---|
 | `lutez_version() -> u32` | `major<<16 \| minor<<8 \| patch` |
 | `lutez_wire_format_version() -> u32` | wire format (2) |
-| `lutez_abi_version() -> u32` | C ABI version (2) |
+| `lutez_abi_version() -> u32` | C ABI version (3) |
 | `lutez_alloc(len) -> u32` | allocate in WASM heap (0 = OOM) |
 | `lutez_free(ptr, len)` | free a buffer from `lutez_alloc` |
 | `lutez_parse(md_ptr, md_len, opts_ptr) -> u32` | document handle (1..1024) or `0xFFFFFFFF` |
+| `lutez_parse_presets(md_ptr, md_len, opts_ptr, mask) -> u32` | same, with presets |
 | `lutez_doc_ast(handle) -> u64` | packed `(ptr << 32) \| len` |
 | `lutez_doc_free(handle)` | release the document |
 | `lutez_node_count(handle) -> u32` | node count |
 | `lutez_node_type(handle, node) -> i32` | upstream `NodeType` number or `-1` |
 | `lutez_node_span(handle, node, s_ptr, e_ptr) -> u32` | raw span (1 = ok) |
 | `lutez_node_span_norm(...)` | normalized span |
+| `lutez_node_ext_kind(handle, node) -> i32` | extension kind or `-1` |
+| `lutez_node_ext_flags(handle, node) -> u32` | extension flags |
 | `lutez_last_error_ptr() -> u64` | packed pointer/length of the last error |
 
 `opts_ptr` points at the same 16-byte options struct as C. Any call may grow memory;
@@ -87,6 +93,8 @@ const lutez = await Lutez.load("zig-out/lib/lutez.wasm");
 const doc = lutez.parse("# hi *em*\n", { gfmTable: true });
 const ast = doc.ast();            // Uint8Array, wire format v2
 doc.span(1);                      // [rawStart, rawEnd] or null
+const doc2 = lutez.parse("#tag $x$", null, ["opal-note"]);
+doc2.extension(0);                // { kind, flags } or null
 console.log(doc.nodeCount(), doc.nodeType(0));
 doc.free();
 ```
@@ -107,7 +115,7 @@ defer doc.deinit();
 
 ## Versioning
 
-- `LUTEZ_ABI_VERSION` (C/WASM) — currently **2** (spans, v2 options tail).
+- `LUTEZ_ABI_VERSION` (C/WASM) — currently **3** (preset APIs, extension nodes).
 - `wire_format_version` — currently **2** (56-byte records, source map).
 - `lutez_version_string()` — library semver.
 

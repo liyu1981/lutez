@@ -8,7 +8,7 @@
 //
 // Any call may grow WASM memory: `doc.ast()` and node data create fresh views.
 
-const ABI = 2;
+const ABI = 3;
 const OPTS_SIZE = 16;
 const NULL_NODE = 0xffffffff;
 
@@ -98,13 +98,17 @@ export class Lutez {
   }
 
   /// Parse UTF-8 markdown; returns a Doc. Throws with the library error message.
-  parse(markdown, opts) {
+  /// `extensions` may be a preset mask or { presets: ["opal-note"|"frontmatter"|...] }.
+  parse(markdown, opts, extensions) {
     const md = new TextEncoder().encode(markdown);
     const mdPtr = this.#copyIn(md);
     const optsPtr = this.#opts(opts);
+    const mask = presetMask(extensions);
     let handle;
     try {
-      handle = this.#x.lutez_parse(mdPtr, md.length, optsPtr) >>> 0;
+      handle = mask === 0
+        ? this.#x.lutez_parse(mdPtr, md.length, optsPtr) >>> 0
+        : this.#x.lutez_parse_presets(mdPtr, md.length, optsPtr, mask) >>> 0;
     } finally {
       if (mdPtr) this.#x.lutez_free(mdPtr, md.length);
       if (optsPtr) this.#x.lutez_free(optsPtr, OPTS_SIZE);
@@ -151,6 +155,13 @@ export class Doc {
     return this.#x.lutez_node_type(this.#handle, node);
   }
 
+  extension(node) {
+    this.#check();
+    const kind = this.#x.lutez_node_ext_kind(this.#handle, node);
+    if (kind < 0) return null;
+    return { kind, flags: this.#x.lutez_node_ext_flags(this.#handle, node) >>> 0 };
+  }
+
   span(node) {
     this.#check();
     const x = this.#x;
@@ -172,6 +183,32 @@ export class Doc {
     this.#x.lutez_doc_free(this.#handle);
     this.#freed = true;
   }
+}
+
+export const PRESETS = {
+  frontmatter: 1 << 0,
+  math: 1 << 1,
+  wikilinks: 1 << 2,
+  tags: 1 << 3,
+  outlinerBlocks: 1 << 4,
+  "opal-note": (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4),
+};
+
+function presetMask(extensions) {
+  if (extensions === undefined || extensions === null) return 0;
+  if (typeof extensions === "number") return extensions >>> 0;
+  if (Array.isArray(extensions)) {
+    return extensions.reduce((m, name) => m | (PRESETS[name] || 0), 0) >>> 0;
+  }
+  if (typeof extensions === "object") {
+    if (Array.isArray(extensions.presets)) return presetMask(extensions.presets);
+    let mask = 0;
+    for (const [name, bit] of Object.entries(PRESETS)) {
+      if (typeof bit === "number" && extensions[name] === true) mask |= bit;
+    }
+    return mask >>> 0;
+  }
+  return 0;
 }
 
 export { NULL_NODE };

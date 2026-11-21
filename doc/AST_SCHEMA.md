@@ -1,6 +1,6 @@
 # lutez AST schema (scoped CommonMark/GFM subset)
 
-**Status: v1 frozen (M0.3).** Implemented by `src/ast/node.zig`, serialized by
+**Status: v2 (adds optional extension types 500/501).** Implemented by `src/ast/node.zig`, serialized by
 `src/ast/wire.zig`; changes require a wire-format/schema version bump and a corpus
 regeneration.
 
@@ -118,12 +118,27 @@ Numbers are upstream values and must never be renumbered.
 | 400 | `NodeBackslash` | `NodeBackslash` | `\` marker + one child |
 | 401 | `NodeBackslashContent` | `NodeBackslashContent` | escaped byte |
 
+### 2.4 Optional dialect extensions (500–501)
+
+These nodes exist only when an extension preset is enabled (`lutez_parse_presets`).
+
+| # | Type string | Payload / kind |
+|---:|---|---|
+| 500 | `NodeBlockExtension` | block leaf: frontmatter (kind 4), Logseq property (kind 5), fenced math (kind 1) |
+| 501 | `NodeInlineExtension` | inline leaf: math (kind 1), wikilink (kind 2), tag (kind 3), Obsidian block ID (kind 6) |
+
+The node's **tokens are the raw payload**; the source span includes delimiters/prefix.
+The `ext` blob is `{u32 kind, u16 flags, u8 payload_version=1, u8 reserved}`. Kind ids are
+public and frozen: 1 math, 2 wikilink, 3 tag, 4 frontmatter, 5 Logseq property, 6 Obsidian
+block ID. Flags: bit 0 display math, bit 1 block math. Extension nodes are leaves.
+
 **Not whitelisted** (must never be constructed): emoji 200–203, math 300–307,
 VditorCaret 405, footnotes 410–412, ToC 415, HeadingID 420, YAML 425–428,
 BlockRef 430–434, Mark 450–454, Kramdown IAL 455–456, Tags 460–462, query embed,
 braces, SuperBlock, Sup/Sub, GitConflict, IFrame/Audio/Video, Kbd, Underline, Br,
 TextMark, Widget, FileAnnotationRef, AttributeView, CustomBlock, HTMLTag, Callout,
-Tabs, TabItem, Mindmap, and any type ≥ 500.
+Tabs, TabItem, Mindmap, and any type ≥ 500 other than 500/501. Dialect constructs use
+the extension types above, never upstream's math/tag/YAML node types.
 
 ---
 

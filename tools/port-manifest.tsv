@@ -24,6 +24,8 @@ src/parse/links.zig	parse/link.go + parse/inline_link.go	ported
 src/parse/refdef.zig	parse/linkrefdef_index.go + parse/linkrefdef_case_fold.go	ported
 src/parse/delimiter.zig	parse/delimiter.go	ported
 src/parse/inline.zig	parse/inline.go + parse/text.go + parse/code_span.go + parse/inlines.go	ported
+src/parse/extensions.zig	- (presets, not upstream)	new
+src/extensions_tests.zig	- (tests)	new
 src/parse/inline_html.zig	parse/inline_html.go	ported
 src/parse/auto_link.zig	parse/auto_link.go	ported
 src/parse/tlds.zig	parse/auto_link.go (allTLDs)	generated

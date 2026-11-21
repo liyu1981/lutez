@@ -109,7 +109,7 @@ export function renderLanding({ version, upstreamSha }) {
           </div>
         </div>
         <div class="float-chip c1">0 imports</div>
-        <div class="float-chip c2">230 KB wasm</div>
+        <div class="float-chip c2">243 KB wasm</div>
       </div>
     </div>
     <div class="stat-strip">

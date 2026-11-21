@@ -88,6 +88,31 @@ Inline <kbd>HTML</kbd> stays raw; entities: &copy; &#35; &#x1F600;.
 `,
   },
   {
+    id: "dialect",
+    label: "Dialect extensions",
+    difficulty: "complex",
+    extensions: true,
+    markdown: `---
+title: Opal note
+tags: [demo]
+...
+
+# Dialect extensions
+
+Inline math $a^2 + b^2 = c^2$ and display $$\\int_0^1 x dx$$.
+A [[wikilink|with alias]] and #topic/subtopic.
+
+^block-42
+
+- outliner:: value
+- another:: property
+
+$$
+\\sum_{i=1}^{n} i
+$$
+`,
+  },
+  {
     id: "kitchen",
     label: "Kitchen sink",
     difficulty: "complex",

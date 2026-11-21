@@ -1,12 +1,12 @@
 # lutez — implementation plan
 
-**Status:** v1.0 complete (2026-11-21); **v0.2.0 adds source spans + wire/ABI v2** (see
-`OPALNOTE_INTEGRATION_PLAN.md`). Decisions in §12 agreed; M0–M6.4 delivered.
+**Status:** v1.0 core complete (2026-11-21); **v0.2.0 added source spans + wire v2**,
+**v0.3.0 adds optional dialect extension presets + ABI 3** (see `EXTENSIONS_DESIGN.md`). Decisions in §12 agreed; M0–M6.4 delivered.
 **Progress:** M0–M6.4 complete. CommonMark: **652/652** AST parity; GFM: **672/672**;
 L2 live differential **652/652**; L3 HTML oracle **652/652 byte-identical**; Go dual fuzz
 **3000/3000**; Zig crash fuzz clean; 8-thread TSan clean; leak-free tests. Performance:
 0.91 ms for the spec corpus (3.9× faster than Go; `doc/BENCHMARKS.md`). ABI: C library +
-header, WASM (230 KB, zero imports), JS glue + `.d.ts` + browser smoke, per-target
+header, WASM (243 KB, zero imports), JS glue + `.d.ts` + browser smoke, per-target
 static/dynamic packaging with reproducible archives. Release checklist in
 `doc/RELEASE.md`; deviations in `doc/PORTING_NOTES.md`.
 **Scope authority:** [`doc/ZIG_PORT_FEASIBILITY.md`](./ZIG_PORT_FEASIBILITY.md) (frozen)
@@ -41,12 +41,17 @@ handle. Rendering is not ported and not in scope.
 
 Everything the feasibility report excludes: all SiYuan/Protyle/Vditor extensions
 (BlockRef, FileAnnotationRef, TextMark, Callout, Tabs, SuperBlock, CustomBlock,
-TableRich, DocumentTitle, GitConflict, Kramdown IAL, Spin, Tag, Mark, Sup/Sub, TOC,
-Emoji aliases, Footnotes, math, YAML front matter, heading IDs, paragraph-beginning-space),
-all rendering (`render/*`, `protyle*.go`, `vditor*.go`, `h2m.go`, `latex_math.go`),
-the HTML5 tokenizer/parser (`html/parse.go`, `html/token.go`, `html/atom`), the `Lute`
-wrapper API, JSON decoding of document titles, node IDs, base64, `time`/`rand`,
-`net/url`, `regexp`, `sync`, and code-syntax highlighting (chroma).
+TableRich, DocumentTitle, GitConflict, Kramdown IAL, Spin, upstream Tag/Mark/Sup/Sub,
+TOC, Emoji aliases, Footnotes, upstream math/YAML front matter, heading IDs,
+paragraph-beginning-space), all rendering (`render/*`, `protyle*.go`, `vditor*.go`,
+`h2m.go`, `latex_math.go`), the HTML5 tokenizer/parser (`html/parse.go`,
+`html/token.go`, `html/atom`), the `Lute` wrapper API, JSON decoding of document titles,
+node IDs, base64, `time`/`rand`, `net/url`, `regexp`, `sync`, and code-syntax
+highlighting (chroma).
+
+The optional v0.3 dialect **presets** (frontmatter, math, wikilinks, tags, Logseq/
+Obsidian block markers) are deliberately separate from those upstream extensions: raw
+payloads, no YAML/HTML parsing, off by default. See `EXTENSIONS_DESIGN.md`.
 
 CommonMark **HTML blocks and inline HTML stay in scope as lexical scanning only**;
 their content is stored as raw text. Entity decoding and link-destination percent
@@ -67,7 +72,7 @@ upstream's HTML rendering of `lutez`'s AST must be byte-identical for the scoped
 | # | Deliverable | Acceptance gate |
 |---|---|---|
 | D1 | Zig library (static + shared) `liblutez` | builds on Linux/macOS/Windows x86-64 + aarch64 from one machine |
-| D2 | `include/lutez.h` C ABI v2 | C99 sample compiles and runs; no leaks under Valgrind/ASan |
+| D2 | `include/lutez.h` C ABI v3 | C99 sample compiles and runs; no leaks under Valgrind/ASan |
 | D3 | WASM module `lutez.wasm` (wasm32-freestanding) | **zero imports**, ≤ 500 KB raw, runs in Node 24 and a browser smoke page |
 | D4 | CommonMark conformance | **652/652** `test/commonmark-spec.json` examples: AST parity **and** HTML parity |
 | D5 | GFM conformance | 100 % of generated GFM fixture set (tables, strikethrough, task lists, extended autolinks) |
@@ -176,7 +181,7 @@ Node 48 B: u16 type, u16 flags, u32 parent/first_child/last_child/prev/next,
 - Decoder lives in Zig too (`wire.decode`) because the corpus runner and round-trip
   tests need it; it is not part of the public ABI.
 
-### 3.6 C ABI v2 (ADR-5)
+### 3.6 C ABI v3 (ADR-5)
 
 Draft in `include/lutez.h`:
 
@@ -241,7 +246,7 @@ re-creates typed-array views after any call that can grow memory.
 lutez/
 ├── build.zig                  # native static+shared, wasm, tests, smoke-c
 ├── build.zig.zon
-├── include/lutez.h            # C ABI v2 (versioned, source spans)
+├── include/lutez.h            # C ABI v3 (versioned, spans, presets)
 ├── src/
 │   ├── lutez.zig              # public Zig API: parse(), Doc, Options, Error
 │   ├── c_api.zig              # exported C symbols (thin, validated)

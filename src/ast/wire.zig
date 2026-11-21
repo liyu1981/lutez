@@ -63,6 +63,12 @@ fn putU32(out: *std.ArrayListUnmanaged(u8), a: std.mem.Allocator, v: u32) !void 
 fn putI32(out: *std.ArrayListUnmanaged(u8), a: std.mem.Allocator, v: i32) !void {
     try putU32(out, a, @bitCast(v));
 }
+fn putU16(out: *std.ArrayListUnmanaged(u8), a: std.mem.Allocator, v: u16) !void {
+    var buf: [2]u8 = undefined;
+    std.mem.writeInt(u16, &buf, v, .little);
+    try out.appendSlice(a, &buf);
+}
+
 fn putBytes(out: *std.ArrayListUnmanaged(u8), a: std.mem.Allocator, bs: []const u8) !void {
     try putU32(out, a, @intCast(bs.len));
     try out.appendSlice(a, bs);
@@ -114,6 +120,12 @@ fn putExt(a: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), n: *node.Node)
         .table_cell => try putU8(out, a, n.table_cell_align),
         .task_list_item_marker => try putU8(out, a, n.task_marker),
         .code_span => try putU32(out, a, n.code_marker_len),
+        .block_extension, .inline_extension => {
+            try putU32(out, a, n.ext_kind);
+            try putU16(out, a, n.ext_flags);
+            try putU8(out, a, 1); // payload version
+            try putU8(out, a, 0);
+        },
         else => {},
     }
 }
@@ -167,7 +179,14 @@ pub fn encode(allocator: std.mem.Allocator, root: *node.Node, input: []const u8,
     @memset(buf, 0);
     @memcpy(buf[0..8], magic);
     std.mem.writeInt(u32, buf[8..12], version, .little);
-    std.mem.writeInt(u32, buf[12..16], 1, .little); // little-endian flag
+    var header_flags: u32 = 1; // little-endian
+    for (ctx.nodes.items) |n| {
+        if (n.typ == .block_extension or n.typ == .inline_extension) {
+            header_flags |= 2; // has_extensions
+            break;
+        }
+    }
+    std.mem.writeInt(u32, buf[12..16], header_flags, .little);
     std.mem.writeInt(u32, buf[16..20], count, .little);
     std.mem.writeInt(u32, buf[20..24], @intCast(node_stride), .little);
     std.mem.writeInt(u32, buf[24..28], @intCast(input.len), .little);
@@ -231,6 +250,12 @@ const Reader = struct {
         if (r.off + 1 > r.buf.len) return error.BadWire;
         const v = r.buf[r.off];
         r.off += 1;
+        return v;
+    }
+    fn u16_(r: *Reader) Error!u16 {
+        if (r.off + 2 > r.buf.len) return error.BadWire;
+        const v = std.mem.readInt(u16, r.buf[r.off..][0..2], .little);
+        r.off += 2;
         return v;
     }
     fn u32_(r: *Reader) Error!u32 {
@@ -363,6 +388,12 @@ fn decodeExt(allocator: std.mem.Allocator, n: *node.Node, r: *Reader) Error!void
         .table_cell => n.table_cell_align = try r.u8_(),
         .task_list_item_marker => n.task_marker = try r.u8_(),
         .code_span => n.code_marker_len = try r.u32_(),
+        .block_extension, .inline_extension => {
+            n.ext_kind = try r.u32_();
+            n.ext_flags = try r.u16_();
+            _ = try r.u8_(); // payload version
+            _ = try r.u8_(); // reserved
+        },
         else => {},
     }
 }

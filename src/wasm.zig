@@ -17,6 +17,10 @@ fn setError(e: anyerror) void {
     last_error = abi.errorMessage(e);
 }
 
+fn setErrorMsg(msg: [:0]const u8) void {
+    last_error = msg;
+}
+
 fn pack(ptr: [*]const u8, len: usize) u64 {
     return (@as(u64, @intCast(@intFromPtr(ptr))) << 32) | @as(u64, @intCast(len));
 }
@@ -46,6 +50,34 @@ fn readOpts(opts_ptr: u32) types.Error!types.Options {
     if (opts_ptr == 0) return abi.fromC(null);
     const p: *const abi.lutez_opts = @ptrFromInt(opts_ptr);
     return abi.fromC(p);
+}
+
+/// Parse markdown with extension presets; handle or `no_handle`.
+export fn lutez_parse_presets(md_ptr: u32, md_len: u32, opts_ptr: u32, presets: u32) u32 {
+    if (presets & ~types.ExtensionMask.all != 0) {
+        setErrorMsg("invalid extension presets");
+        return no_handle;
+    }
+    var options = readOpts(opts_ptr) catch |e| {
+        setError(e);
+        return no_handle;
+    };
+    options.extensions = presets;
+    const input: []const u8 = if (md_len == 0) &.{} else @as([*]const u8, @ptrFromInt(md_ptr))[0..md_len];
+    const d = doc_mod.Document.create(allocator, input, options) catch |e| {
+        setError(e);
+        return no_handle;
+    };
+    var i: u32 = 0;
+    while (i < max_docs) : (i += 1) {
+        if (slots[i] == null) {
+            slots[i] = d;
+            return i + 1;
+        }
+    }
+    d.destroy(allocator);
+    setError(error.OutOfMemory);
+    return no_handle;
 }
 
 /// Parse markdown; returns a handle (1..max_docs) or `no_handle` on error.
@@ -140,6 +172,18 @@ export fn lutez_node_span_norm(handle: u32, node: u32, out_start: u32, out_end: 
         p.* = sp.end;
     }
     return 1;
+}
+
+export fn lutez_node_ext_kind(handle: u32, node: u32) i32 {
+    const d = docFor(handle) orelse return -1;
+    const v = doc_mod.View.init(d.ast()) orelse return -1;
+    return @intCast(v.extKind(node));
+}
+
+export fn lutez_node_ext_flags(handle: u32, node: u32) u32 {
+    const d = docFor(handle) orelse return 0;
+    const v = doc_mod.View.init(d.ast()) orelse return 0;
+    return v.extFlags(node);
 }
 
 export fn lutez_node_span_derived(handle: u32, node: u32) u32 {

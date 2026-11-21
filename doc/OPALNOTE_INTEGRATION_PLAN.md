@@ -1,7 +1,9 @@
 # opal_note integration: source positions and generic extensions
 
 **Status:** **P1–P3 implemented in lutez 0.2.0** (source spans in the AST, wire v2 and
-ABI v2). P4–P6 (generic extension engine + opal_note dialect) remain planned. Inputs:
+ABI v2). **0.3.0 adds P4–P6:** extension node types, five presets (frontmatter, math,
+wikilinks, tags, Logseq/Obsidian blocks) and the preset ABI. The public binary-spec
+builder remains planned for 0.4; see [`EXTENSIONS_DESIGN.md`](./EXTENSIONS_DESIGN.md). Inputs:
 opal_note integration review and the current `lutez` implementation. This document
 evaluates the two blockers and proposes a path; §2 is now historical design context.
 
@@ -334,7 +336,7 @@ without a fork. The five built-ins are compiled-in presets.
 
 ---
 
-## 4. Combined plan (0.2.0)
+## 4. Combined plan (0.2 positions, 0.3 extensions)
 
 ### Phase P1 — position contract and wire v2 (week 1)
 
@@ -424,7 +426,7 @@ nodes with spans, old corpora unchanged with empty spec.
   normalized spans and a source map. Do not ship a heuristic post-pass.
 - **Yes to generic extensions**, but as **data-driven rules**, not callbacks. Implement
   `NodeExtension` + a small rule language and ship the five opal_note constructs as presets.
-- Ship both in **0.2.0** (one wire/ABI break), keep CommonMark/GFM parity locked behind the
+- Ship positions in 0.2.0 and extensions in 0.3.0, keep CommonMark/GFM parity locked behind the
   existing corpora, and treat opal_note’s dialect as a second, opt-in corpus.
 - Start with P1–P3 (positions) because the extension engine depends on the span/mapping
   infrastructure; give opal_note an early access build once P3 lands.

@@ -23,7 +23,7 @@ Gate (doc/PLAN.md §2 D7): ≥ 1.2× faster than the Go baseline — **met** (3.
 | Zig crash fuzz (2000 random byte inputs + 120 mutated corpus cases) | no panics/OOB |
 | Thread stress | 8 threads × 300 parses; TSan clean |
 | Sanitizers | `zig build test -Dsanitize=thread` and `-Dsanitize=c` pass |
-| WASM | 230 KB, zero imports, Node + browser smoke |
+| WASM | 243 KB, zero imports, Node + browser smoke |
 
 Commands:
 
@@ -58,7 +58,7 @@ Notes:
 - The first measurement used `std.heap.page_allocator` as the arena backing and was
   4.5× slower than Go; switching to `std.heap.smp_allocator` (and `wasm_allocator` in
   WASM builds) removed per-node mmap churn.
-- WAsm artifact: **230 KB**, zero imports (`zig build wasm`).
+- WAsm artifact: **243 KB**, zero imports (`zig build wasm`).
 
 Reproduce:
 

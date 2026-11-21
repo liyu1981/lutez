@@ -22,6 +22,7 @@ export const docs = [
   { slug: "porting-notes", summary: "Intentional deviations from upstream and known limitations.", title: "Porting notes", group: "Project", source: "../doc/PORTING_NOTES.md" },
   { slug: "release", summary: "Release checklist, artifact matrix and reproducibility checks.", title: "Release process", group: "Project", source: "../doc/RELEASE.md" },
   { slug: "upstream", summary: "Pinned upstream revision and the release-tag bump procedure.", title: "Upstream pin", group: "Project", source: "../doc/UPSTREAM.md" },
+  { slug: "extensions", summary: "Optional opal_note dialect presets, extension nodes and payloads.", title: "Extensions", group: "Reference", source: "../doc/EXTENSIONS_DESIGN.md" },
 ];
 
 export const docGroups = ["Introduction", "Reference", "Project"];

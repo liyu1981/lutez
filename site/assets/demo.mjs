@@ -22,6 +22,7 @@ const state = {
   decoded: null,
   selected: null,
   active: examples[0].id,
+  extensions: false,
   expanded: new Set(),
   timer: 0,
   json: "",
@@ -119,6 +120,7 @@ function renderInspector() {
     ["span", `${node.raw[0]}..${node.raw[1]}${node.derived ? " (derived)" : ""}`],
     ["norm span", `${node.norm[0]}..${node.norm[1]}`],
     ["tokens", node.tokens || "—"],
+    ...(node.extension ? [["ext kind", node.extension.kind], ["ext flags", node.extension.flags]] : []),
     ...Object.entries(node.fields).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : String(v)]),
   ];
   inspector.innerHTML = `<h3>Node ${node.index}</h3><dl>${rows
@@ -159,7 +161,7 @@ function parseNow() {
   const t0 = performance.now();
   let doc;
   try {
-    doc = state.lutez.parse(md);
+    doc = state.lutez.parse(md, null, state.extensions ? { presets: ["opal-note"] } : null);
     const ast = doc.ast();
     const decoded = decodeAst(ast);
     state.decoded = decoded;
@@ -197,6 +199,10 @@ function scheduleParse() {
 function setExample(id, updateHash = true) {
   const example = examples.find((e) => e.id === id) || examples[0];
   state.active = example.id;
+  state.extensions = example.extensions === true;
+  const extButton = $("toggle-extensions");
+  extButton.textContent = state.extensions ? "Ext on" : "Ext off";
+  extButton.setAttribute("aria-pressed", String(state.extensions));
   state.selected = null;
   state.expanded = new Set();
   editor.value = example.markdown;
@@ -272,6 +278,13 @@ async function boot() {
   $("expand-all").addEventListener("click", expandAll);
   $("collapse-all").addEventListener("click", collapseAll);
   $("reset").addEventListener("click", () => setExample(state.active, false));
+  const extToggle = $("toggle-extensions");
+  extToggle.addEventListener("click", () => {
+    state.extensions = !state.extensions;
+    extToggle.textContent = state.extensions ? "Ext on" : "Ext off";
+    extToggle.setAttribute("aria-pressed", String(state.extensions));
+    parseNow();
+  });
   const spanToggle = $("toggle-spans");
   spanToggle.addEventListener("click", () => {
     const on = treeEl.classList.toggle("no-spans");

@@ -1,4 +1,4 @@
-//! lutez C ABI v2: opaque documents, wire AST, ergonomic accessors, thread-local errors.
+//! lutez C ABI v3: opaque documents, wire AST, ergonomic accessors, thread-local errors.
 const std = @import("std");
 const lutez = @import("lutez");
 const types = lutez.types;
@@ -60,6 +60,35 @@ export fn lutez_last_error() [*:0]const u8 {
 
 export fn lutez_last_error_code() i32 {
     return last_code;
+}
+
+/// Parse with opt-in extension presets (mask bits: see `LUTEZ_EXT_*`).
+export fn lutez_parse_presets(md: ?[*]const u8, len: usize, opts: ?*const lutez_opts, presets: u32) ?*lutez_doc {
+    clearError();
+    if (presets & ~types.ExtensionMask.all != 0) {
+        setError(error.InvalidOptions);
+        return null;
+    }
+    if (len > std.math.maxInt(u32)) {
+        setError(error.InputTooLarge);
+        return null;
+    }
+    if (len != 0 and md == null) {
+        last_error = "NULL markdown pointer with non-zero length";
+        last_code = LUTEZ_ERR_INVALID_OPTIONS;
+        return null;
+    }
+    var options = abi.fromC(opts) catch |e| {
+        setError(e);
+        return null;
+    };
+    options.extensions = presets;
+    const input: []const u8 = if (len == 0) &.{} else md.?[0..len];
+    const d = doc_mod.Document.create(backing, input, options) catch |e| {
+        setError(e);
+        return null;
+    };
+    return @ptrCast(d);
 }
 
 /// Parse UTF-8 markdown. Returns NULL on failure (see lutez_last_error).
@@ -157,6 +186,18 @@ export fn lutez_node_span_norm(doc: ?*const lutez_doc, node: u32, out_start: ?*u
     return 1;
 }
 
+export fn lutez_node_ext_kind(doc: ?*const lutez_doc, node: u32) i32 {
+    const d = impl(doc) orelse return -1;
+    const v = doc_mod.View.init(d.ast()) orelse return -1;
+    return @intCast(v.extKind(node));
+}
+
+export fn lutez_node_ext_flags(doc: ?*const lutez_doc, node: u32) u32 {
+    const d = impl(doc) orelse return 0;
+    const v = doc_mod.View.init(d.ast()) orelse return 0;
+    return v.extFlags(node);
+}
+
 export fn lutez_node_span_derived(doc: ?*const lutez_doc, node: u32) u32 {
     const d = impl(doc) orelse return 0;
     const v = doc_mod.View.init(d.ast()) orelse return 0;
@@ -176,7 +217,7 @@ test "C ABI parses and exposes the wire AST" {
     const md = "# hi *em*\n";
     const doc = lutez_parse(md.ptr, md.len, null).?;
     defer lutez_doc_free(doc);
-    try std.testing.expect(lutez_doc_abi_version(doc) == 2);
+    try std.testing.expect(lutez_doc_abi_version(doc) == 3);
     try std.testing.expect(lutez_node_count(doc) >= 3);
     try std.testing.expectEqual(@as(i32, 0), lutez_node_type(doc, 0));
     var len: usize = 0;
@@ -199,6 +240,24 @@ test "C ABI reports invalid options and NULL input" {
     o.struct_size = 2;
     try std.testing.expectEqual(@as(?*lutez_doc, null), lutez_parse(null, 0, &o));
     try std.testing.expectEqual(LUTEZ_ERR_INVALID_OPTIONS, lutez_last_error_code());
+}
+
+test "C ABI presets expose extension nodes" {
+    const md = "---\na: 1\n...\n#tag $x$ [[w]]\n";
+    const doc = lutez_parse_presets(md.ptr, md.len, null, types.ExtensionMask.frontmatter | types.ExtensionMask.tags | types.ExtensionMask.math | types.ExtensionMask.wiki_links).?;
+    defer lutez_doc_free(doc);
+    try std.testing.expectEqual(@as(i32, 500), lutez_node_type(doc, 1));
+    try std.testing.expectEqual(@as(i32, 4), lutez_node_ext_kind(doc, 1)); // frontmatter
+    var found_tag = false;
+    var i: u32 = 0;
+    while (i < lutez_node_count(doc)) : (i += 1) {
+        if (lutez_node_ext_kind(doc, i) == 3) found_tag = true;
+    }
+    try std.testing.expect(found_tag);
+
+    const plain = lutez_parse(md.ptr, md.len, null).?;
+    defer lutez_doc_free(plain);
+    try std.testing.expectEqual(@as(i32, -1), lutez_node_ext_kind(plain, 1));
 }
 
 test "C ABI strip_bom option" {

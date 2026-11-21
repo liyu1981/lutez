@@ -96,6 +96,19 @@ opts.gfm_strikethrough = 0;
 opts.gfm_auto_link = 0;
 ```
 
+Enable dialect presets without touching the core parser:
+
+```c
+lutez_doc *doc = lutez_parse_presets(md, len, NULL,
+    LUTEZ_EXT_FRONTMATTER | LUTEZ_EXT_MATH | LUTEZ_EXT_WIKILINKS |
+    LUTEZ_EXT_TAGS | LUTEZ_EXT_OUTLINER_BLOCKS);
+```
+
+```js
+const doc = lutez.parse(md, null, ["opal-note"]);
+doc.extension(node);  // { kind, flags }
+```
+
 A leading UTF-8 BOM is ignored by default (`strip_bom = 1` in C, `stripBom: true` in JS).
 Set it to 0/false to keep the BOM as content (legacy Lute behaviour).
 

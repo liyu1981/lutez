@@ -108,6 +108,15 @@ func (r *reader) u8() (byte, error) {
 	return v, nil
 }
 
+func (r *reader) u16() (uint16, error) {
+	if r.off+2 > len(r.b) {
+		return 0, errors.New("wire: ext truncated")
+	}
+	v := binary.LittleEndian.Uint16(r.b[r.off:])
+	r.off += 2
+	return v, nil
+}
+
 func (r *reader) u32() (uint32, error) {
 	if r.off+4 > len(r.b) {
 		return 0, errors.New("wire: ext truncated")
@@ -295,6 +304,19 @@ func decodeExt(n *ast.Node, b []byte) error {
 			return err
 		}
 		n.CodeMarkerLen = int(ml)
+	case ast.NodeType(500), ast.NodeType(501): // extension nodes (optional presets)
+		if _, err := r.u32(); err != nil { // kind
+			return err
+		}
+		if _, err := r.u16(); err != nil { // flags
+			return err
+		}
+		if _, err := r.u8(); err != nil { // payload version
+			return err
+		}
+		if _, err := r.u8(); err != nil { // reserved
+			return err
+		}
 	}
 	if r.off != len(r.b) {
 		return errors.New("wire: ext has trailing bytes")

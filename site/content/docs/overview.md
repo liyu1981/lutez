@@ -24,9 +24,10 @@ The parser is exposed through four surfaces that share one AST contract:
 ## What is not
 
 Renderers, HTML parsing (HTML blocks are scanned lexically and kept as raw text), the
-SiYuan/Protyle/Vditor extensions, Kramdown IAL, footnotes, math, emoji aliases, YAML front
-matter, heading IDs, TOC, block refs, and document metadata. The scope fence is recorded
-in the [implementation plan](./plan.md).
+SiYuan/Protyle/Vditor extensions, Kramdown IAL, footnotes, upstream math/YAML/tag
+extensions, emoji aliases, heading IDs, TOC, block refs, and document metadata. The
+opal_note dialect is available as opt-in presets (raw payloads, no YAML parsing); the
+scope fence is recorded in the [implementation plan](./plan.md).
 
 ## Design at a glance
 
@@ -39,7 +40,7 @@ The in-memory tree uses pointer links into a per-document arena; the serialized 
 `u32` indices, so it is safe for WASM32 and trivially copyable. See
 [porting notes](./porting-notes.md) for why.
 
-## Parity and performance (v0.2.0)
+## Parity and performance (v0.3.0)
 
 | Check | Result |
 |---|---|
@@ -48,7 +49,7 @@ The in-memory tree uses pointer links into a per-document arena; the serialized 
 | Live differential (Go oracle ↔ C ABI) | **652/652** |
 | HTML oracle (upstream renderer over our AST) | **652/652** byte-identical |
 | Spec-corpus parse time | **0.91 ms** vs 3.54 ms upstream Go |
-| WASM artifact | **230,600 B**, zero imports |
+| WASM artifact | **243,408 B**, zero imports |
 
 Measurements and commands live in [benchmarks](./benchmarks.md).
 
@@ -62,6 +63,14 @@ Measurements and commands live in [benchmarks](./benchmarks.md).
 | `parity/` | Go oracle, wire decoder, differential/HTML/fuzz tooling |
 | `site/` | this website and the WASM playground |
 | `upstream/lute` | pinned git submodule (never edited) |
+
+## Optional extensions
+
+lutez can parse the opal_note dialect (frontmatter, `$…$`/`$$…$$` math, `[[wikilinks]]`,
+`#tags`, Logseq `key::` properties and Obsidian `^block-id`) through **presets**. They are
+off by default; enabling them never changes the core CM/GFM AST. Extension nodes are
+`NodeBlockExtension`/`NodeInlineExtension` with raw payloads and source spans; see
+[`Extensions`](./extensions.html) in the repository.
 
 ## Next
 

@@ -13,6 +13,7 @@ const refdef = @import("refdef.zig");
 pub const StartFn = *const fn (*Tree, *node.Node) anyerror!u8;
 
 pub const starts = [_]StartFn{
+    blockMathStart,
     blockquoteStart,
     atxHeadingStart,
     fenceCodeBlockStart,
@@ -30,6 +31,7 @@ pub fn continueBlock(n: *node.Node, ctx: *Context) anyerror!u8 {
         .paragraph => if (ctx.blank) 1 else 0,
         .list_item => listItemContinue(n, ctx),
         .blockquote => blockquoteContinue(n, ctx),
+        .block_extension => blockExtensionContinue(n, ctx),
         .heading, .thematic_break, .table, .link_ref_def_block => 1,
         else => 0,
     };
@@ -256,6 +258,54 @@ fn blockquoteContinue(_: *node.Node, ctx: *Context) u8 {
 }
 
 pub fn blockquoteFinalize(_: *Context, _: *node.Node) void {}
+
+// ---- extension block math (preset) ---------------------------------------
+
+fn blockMathStart(t: *Tree, container: *node.Node) anyerror!u8 {
+    _ = container;
+    const ctx = t.context;
+    if (ctx.options.extensions & @import("../types.zig").ExtensionMask.math == 0) return 0;
+    if (ctx.indented) return 0;
+    const line = ctx.current_line[0 .. ctx.line_end_norm - ctx.line_norm_start];
+    if (ctx.next_nonspace >= line.len) return 0;
+    const rest = lex.trimWhitespace(line[ctx.next_nonspace..]);
+    if (!std.mem.eql(u8, rest, "$$")) return 0;
+
+    const start = ctx.abs(ctx.next_nonspace);
+    ctx.closeUnmatchedBlocks();
+    const ext = try ctx.addChild(.block_extension);
+    ext.ext_kind = @import("../types.zig").ExtensionKind.math;
+    ext.ext_flags = @import("../types.zig").ExtensionFlags.display_math | @import("../types.zig").ExtensionFlags.block_math;
+    ext.ext_accepts_lines = true;
+    ext.setSpan(start, ctx.line_trimmed_end_norm);
+    ctx.advanceOffset(ctx.current_line_len - ctx.offset, false);
+    return 2;
+}
+
+fn blockExtensionContinue(n: *node.Node, ctx: *Context) u8 {
+    if (!n.ext_accepts_lines) return 1;
+    if (n.ext_kind != @import("../types.zig").ExtensionKind.math) return 1;
+    const line = ctx.current_line[0 .. ctx.line_end_norm - ctx.line_norm_start];
+    if (ctx.next_nonspace < line.len) {
+        const rest = lex.trimWhitespace(line[ctx.next_nonspace..]);
+        if (std.mem.eql(u8, rest, "$$")) {
+            n.src_end = ctx.line_trimmed_end_norm;
+            n.close = true;
+            var anc: ?*node.Node = n.parent;
+            while (anc) |x| : (anc = x.parent) {
+                switch (x.typ) {
+                    .blockquote, .list, .list_item => {
+                        if (n.src_end > x.src_end) x.src_end = n.src_end;
+                    },
+                    else => {},
+                }
+            }
+            ctx.finalize(n);
+            return 2;
+        }
+    }
+    return 0;
+}
 
 // ---- code blocks ----------------------------------------------------------
 
