@@ -11,7 +11,7 @@ pub const Context = tree.Context;
 pub fn parse(allocator: std.mem.Allocator, markdown: []const u8, options: types.Options) !*Tree {
     // Normalize up front (CRLF/CR -> LF, NUL -> U+FFFD, trailing LF) and keep the
     // raw<->normalized offset map for source spans.
-    const norm = try source.normalize(allocator, markdown);
+    const norm = try source.normalize(allocator, markdown, options.strip_bom);
     const t = try allocator.create(Tree);
     try t.init(allocator, norm.bytes, options, norm.map);
     try t.parseBlocks();

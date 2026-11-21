@@ -11,6 +11,8 @@ export interface LutezOptions {
   indentCodeBlock?: boolean;
   linkRef?: boolean;
   dataImage?: boolean;
+  /** Strip a leading UTF-8 BOM (default true). */
+  stripBom?: boolean;
 }
 
 export declare class Doc {

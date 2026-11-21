@@ -65,8 +65,9 @@ export class Lutez {
   }
 
   #copyIn(bytes) {
+    if (bytes.length === 0) return 0;
     const ptr = this.#x.lutez_alloc(bytes.length);
-    if (ptr === 0 && bytes.length !== 0) throw new Error("lutez: out of memory");
+    if (ptr === 0) throw new Error("lutez: out of memory");
     this.#memory().set(bytes, ptr);
     return ptr;
   }
@@ -92,6 +93,7 @@ export class Lutez {
     flags.forEach((name, i) => {
       view.setUint8(4 + i, opts[name] === false ? 0 : 1, true);
     });
+    view.setUint8(15, opts.stripBom === false ? 0 : 1, true);
     return ptr;
   }
 
@@ -154,12 +156,15 @@ export class Doc {
     const x = this.#x;
     const s = x.lutez_alloc(4);
     const e = x.lutez_alloc(4);
-    if (!x.lutez_node_span(this.#handle, node, s, e)) return null;
-    const mem = new DataView(x.memory.buffer);
-    const out = [mem.getUint32(s, true), mem.getUint32(e, true)];
-    x.lutez_free(s, 4);
-    x.lutez_free(e, 4);
-    return out;
+    if (s === 0 || e === 0) throw new Error("lutez: out of memory");
+    try {
+      if (!x.lutez_node_span(this.#handle, node, s, e)) return null;
+      const mem = new DataView(x.memory.buffer);
+      return [mem.getUint32(s, true), mem.getUint32(e, true)];
+    } finally {
+      x.lutez_free(s, 4);
+      x.lutez_free(e, 4);
+    }
   }
 
   free() {

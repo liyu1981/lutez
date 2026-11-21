@@ -57,6 +57,11 @@ This records intentional differences so reviewers and consumers know what to exp
 - Entity decoding uses the generated 2125-entry table from upstream `html.Entities`
   (semicolon required, matching Lute's `HtmlUnescapeString`).
 - The parser is reentrant and allocation-failure-safe; malformed Markdown never errors.
+- A leading UTF-8 BOM is stripped by default (`strip_bom` / `stripBom`); setting it off
+  keeps the BOM as content. The source map records a zero-width BOM segment so block
+  spans still point at the correct raw offsets.
+- Empty input is valid and yields a single `NodeDocument` with span `[0,0)`; the JS glue
+  no longer allocates a zero-length buffer.
 - Source positions cover every node and are validated on both committed corpora
   (`positions.zig` invariants). Lazy blockquote/list continuation lines extend ancestor
   spans so a paragraph remains inside its blockquote/list item.

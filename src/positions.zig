@@ -3,6 +3,7 @@ const std = @import("std");
 const lutez = @import("lutez.zig");
 const node_mod = @import("ast/node.zig");
 const source = @import("source.zig");
+const types = @import("types.zig");
 
 fn appendFmt(allocator: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), comptime fmt: []const u8, args: anytype) !void {
     var buf: [512]u8 = undefined;
@@ -210,4 +211,27 @@ test "wire v2 roundtrip preserves spans" {
         try std.testing.expectEqual(a.src_end, b.src_end);
         try std.testing.expectEqual(a.src_derived, b.src_derived);
     }
+}
+
+test "BOM is stripped by default; option preserves it" {
+    const md = "\u{FEFF}- a\n- b\n";
+    var doc = try lutez.parse(md, .{});
+    defer doc.deinit();
+    try std.testing.expectEqual(@as(usize, 1), countChildren(doc.root));
+    try std.testing.expectEqual(@as(types.NodeType, .list), doc.root.first_child.?.typ);
+    const list = doc.root.first_child.?;
+    try std.testing.expectEqual(@as(u32, 0), list.src_start);
+    try std.testing.expectEqual(@as(u32, 3), doc.source_map.bom_len);
+    try std.testing.expectEqual(@as(u32, 3), doc.source_map.normToRawStart(list.src_start));
+
+    var kept = try lutez.parse(md, .{ .strip_bom = false });
+    defer kept.deinit();
+    try std.testing.expect(countChildren(kept.root) >= 2);
+}
+
+fn countChildren(n: *node_mod.Node) usize {
+    var count: usize = 0;
+    var c = n.first_child;
+    while (c) |ch| : (c = ch.next) count += 1;
+    return count;
 }

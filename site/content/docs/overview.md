@@ -48,7 +48,7 @@ The in-memory tree uses pointer links into a per-document arena; the serialized 
 | Live differential (Go oracle ↔ C ABI) | **652/652** |
 | HTML oracle (upstream renderer over our AST) | **652/652** byte-identical |
 | Spec-corpus parse time | **0.91 ms** vs 3.54 ms upstream Go |
-| WASM artifact | **230,254 B**, zero imports |
+| WASM artifact | **230,600 B**, zero imports |
 
 Measurements and commands live in [benchmarks](./benchmarks.md).
 

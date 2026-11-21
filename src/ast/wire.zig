@@ -206,10 +206,15 @@ pub fn encode(allocator: std.mem.Allocator, root: *node.Node, input: []const u8,
         const ns = if (has) n.src_start else 0;
         const ne = if (has) n.src_end else 0;
         const rs = if (has) map.normToRawStart(ns) else 0;
-        const re = if (has) map.normToRawEnd(ne) else 0;
+        var re = if (has) map.normToRawEnd(ne) else 0;
+        if (n.typ == .document and has) {
+            // The document span covers the whole raw input, including a stripped BOM.
+            re = map.raw_len;
+            std.mem.writeInt(u32, rec[40..44], 0, .little);
+        }
         std.mem.writeInt(u32, rec[32..36], ns, .little);
         std.mem.writeInt(u32, rec[36..40], ne, .little);
-        std.mem.writeInt(u32, rec[40..44], rs, .little);
+        if (n.typ != .document) std.mem.writeInt(u32, rec[40..44], rs, .little);
         std.mem.writeInt(u32, rec[44..48], re, .little);
         std.mem.writeInt(u32, rec[48..52], ext_refs[i], .little);
         std.mem.writeInt(u32, rec[52..56], ext_lens[i], .little);

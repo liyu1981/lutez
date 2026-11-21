@@ -12,6 +12,7 @@ pub const SegKind = enum(u8) {
     crlf = 1,
     nul = 2,
     synthetic = 3,
+    bom = 4,
 };
 
 pub const Seg = struct {
@@ -26,26 +27,27 @@ pub const SourceMap = struct {
     segs: []const Seg,
     raw_len: u32,
     norm_len: u32,
+    bom_len: u32 = 0,
 
     /// Maps a normalized start offset to the first raw byte of the construct containing it.
     pub fn normToRawStart(self: SourceMap, off: u32) u32 {
+        if (off == 0 and self.bom_len > 0) return self.bom_len;
         if (off >= self.norm_len) return self.raw_len;
         const seg = self.segAt(off) orelse return off;
         return switch (seg.kind) {
             .identity => seg.raw_start + (off - seg.norm_start),
-            .crlf, .nul => seg.raw_start,
-            .synthetic => seg.raw_start,
+            .crlf, .nul, .synthetic, .bom => seg.raw_start,
         };
     }
 
     /// Maps a normalized end offset (exclusive) to the matching exclusive raw offset.
     pub fn normToRawEnd(self: SourceMap, off: u32) u32 {
-        if (off == 0) return 0;
+        if (off == 0) return self.bom_len;
         if (off >= self.norm_len) return self.raw_len;
         const seg = self.segAt(off - 1) orelse return off;
         return switch (seg.kind) {
             .identity => seg.raw_start + (off - seg.norm_start),
-            .crlf, .nul, .synthetic => seg.raw_start + seg.raw_len,
+            .crlf, .nul, .synthetic, .bom => seg.raw_start + seg.raw_len,
         };
     }
 
@@ -76,13 +78,25 @@ pub const Normalized = struct {
 
 /// Builds the normalized buffer and its source map. The returned bytes/map are allocated
 /// from `allocator` and remain valid for the document lifetime.
-pub fn normalize(allocator: std.mem.Allocator, input: []const u8) !Normalized {
+pub fn normalize(allocator: std.mem.Allocator, input: []const u8, strip_bom: bool) !Normalized {
     var out: std.ArrayListUnmanaged(u8) = .empty;
     var segs: std.ArrayListUnmanaged(Seg) = .empty;
     try out.ensureTotalCapacity(allocator, input.len + 8);
 
     var raw_pos: usize = 0;
     var norm_pos: usize = 0;
+    var bom_len: u32 = 0;
+    if (strip_bom and input.len >= 3 and std.mem.eql(u8, input[0..3], "\xEF\xBB\xBF")) {
+        bom_len = 3;
+        raw_pos = 3;
+        try segs.append(allocator, .{
+            .norm_start = 0,
+            .norm_len = 0,
+            .raw_start = 0,
+            .raw_len = 3,
+            .kind = .bom,
+        });
+    }
     while (raw_pos < input.len) {
         const b = input[raw_pos];
         if (b == '\r' or b == 0) {
@@ -139,6 +153,7 @@ pub fn normalize(allocator: std.mem.Allocator, input: []const u8) !Normalized {
             .segs = try segs.toOwnedSlice(allocator),
             .raw_len = @intCast(input.len),
             .norm_len = @intCast(norm_pos),
+            .bom_len = bom_len,
         },
     };
 }
@@ -151,7 +166,7 @@ test "normalize identity and trailing newline" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const n = try normalize(a, "a\nb");
+    const n = try normalize(a, "a\nb", false);
     try std.testing.expectEqualStrings("a\nb\n", n.bytes);
     try std.testing.expectEqual(@as(u32, 0), n.map.normToRawStart(0));
     try std.testing.expectEqual(@as(u32, 3), n.map.normToRawEnd(3));
@@ -164,7 +179,7 @@ test "normalize CRLF and lone CR" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const n = try normalize(a, "a\r\nb\rc");
+    const n = try normalize(a, "a\r\nb\rc", false);
     try std.testing.expectEqualStrings("a\nb\nc\n", n.bytes);
     // second line starts at raw 3, normalized 2
     try std.testing.expectEqual(@as(u32, 3), n.map.normToRawStart(2));
@@ -177,7 +192,7 @@ test "normalize NUL to U+FFFD and map boundaries" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const n = try normalize(a, "a\x00b");
+    const n = try normalize(a, "a\x00b", false);
     try std.testing.expectEqualStrings("a\u{FFFD}b\n", n.bytes);
     try std.testing.expectEqual(@as(u32, 1), n.map.normToRawStart(1));
     try std.testing.expectEqual(@as(u32, 2), n.map.normToRawEnd(4));
@@ -188,8 +203,24 @@ test "synthetic trailing newline has zero raw width" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const n = try normalize(a, "abc");
+    const n = try normalize(a, "abc", false);
     try std.testing.expectEqual(@as(u32, 3), n.map.normToRawStart(3));
     try std.testing.expectEqual(@as(u32, 3), n.map.normToRawEnd(4));
     try std.testing.expectEqual(@as(u32, 3), n.map.raw_len);
+}
+
+test "strip BOM maps first normalized byte to raw offset 3" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const bom = "\xEF\xBB\xBF- a\n";
+    const n = try normalize(a, bom, true);
+    try std.testing.expectEqualStrings("- a\n", n.bytes);
+    try std.testing.expectEqual(@as(u32, 3), n.map.bom_len);
+    try std.testing.expectEqual(@as(u32, 3), n.map.normToRawStart(0));
+    try std.testing.expectEqual(@as(u32, 3), n.map.normToRawEnd(0));
+    try std.testing.expectEqual(@as(u32, 4), n.map.normToRawStart(1));
+    const kept = try normalize(a, bom, false);
+    try std.testing.expectEqual(@as(u32, 0), kept.map.bom_len);
+    try std.testing.expectEqual(@as(usize, 3), kept.bytes.len - "- a\n".len);
 }

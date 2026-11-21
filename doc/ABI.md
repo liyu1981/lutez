@@ -31,8 +31,9 @@ Rules:
 - **Errors.** `NULL`/`0`/`-1` plus `lutez_last_error()` and `lutez_last_error_code()`
   (thread-local). Messages are static storage.
 - **Options.** Versioned struct (`struct_size` first, 16 bytes in ABI v2, `uint8_t`
-  flags). Unknown trailing bytes are ignored only when `struct_size >= sizeof(v2)`; a
-  smaller struct is rejected.
+  flags). The final byte is `strip_bom` (default 1 when `opts == NULL`; set to 0 to keep
+  a leading UTF-8 BOM as content). Unknown trailing bytes are ignored only when
+  `struct_size >= sizeof(v2)`; a smaller struct is rejected.
 - **Threading.** Parsing is reentrant; there are no mutable globals. Each thread has its
   own last-error state.
 - **Accessors.** Node handles are `uint32_t` indices (`LUTEZ_NULL_NODE` = absent).

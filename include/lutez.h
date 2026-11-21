@@ -58,7 +58,7 @@ typedef struct lutez_opts {
   uint8_t indent_code_block;
   uint8_t link_ref;
   uint8_t data_image;
-  uint8_t reserved; /* must be 0 */
+  uint8_t strip_bom; /* 1 = ignore a leading UTF-8 BOM (NULL opts: 1) */
 } lutez_opts;
 
 typedef struct lutez_doc lutez_doc;

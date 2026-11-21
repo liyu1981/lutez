@@ -117,7 +117,7 @@ u32 count
 count × {
   u32 norm_start, u32 norm_len,
   u32 raw_start,  u32 raw_len,
-  u8  kind, u8 reserved[3]      // kind: 0 identity, 1 CR/CRLF, 2 NUL, 3 synthetic LF
+  u8  kind, u8 reserved[3]      // 0 identity, 1 CR/CRLF, 2 NUL, 3 synthetic LF, 4 BOM
 }
 ```
 
@@ -127,7 +127,10 @@ Segments cover the normalized buffer in order. Consumers convert with:
 - end: identity → `raw_start + (off - norm_start)`; changed/synthetic → `raw_start + raw_len`.
 
 For unchanged regions (kind 0) lengths are equal; for NUL one raw byte maps to the three
-bytes of U+FFFD. Synthetic trailing LF has `raw_len = 0`.
+bytes of U+FFFD. Synthetic trailing LF has `raw_len = 0`. A stripped BOM is a zero-width
+segment at `norm_start = 0` with `raw_len = 3`: normalized offset 0 maps to raw 3, while
+the `NodeDocument` root always spans `[0, raw_len)` so the BOM stays inside the document
+range.
 
 ## 5. Input and pool sections
 

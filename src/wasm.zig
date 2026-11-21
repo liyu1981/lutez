@@ -31,6 +31,7 @@ export fn lutez_abi_version() u32 {
 }
 
 export fn lutez_alloc(len: u32) u32 {
+    if (len == 0) return 0;
     const buf = allocator.alloc(u8, len) catch return 0;
     return @intCast(@intFromPtr(buf.ptr));
 }

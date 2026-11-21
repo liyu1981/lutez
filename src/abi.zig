@@ -23,7 +23,7 @@ pub const lutez_opts = extern struct {
     indent_code_block: u8,
     link_ref: u8,
     data_image: u8,
-    reserved: u8,
+    strip_bom: u8,
 };
 
 pub const opts_v1_size: u32 = @sizeOf(lutez_opts);
@@ -36,7 +36,6 @@ pub fn fromC(opts: ?*const lutez_opts) types.Error!types.Options {
     var out: types.Options = .{};
     const o = opts orelse return out; // NULL = upstream defaults
     if (o.struct_size < opts_v1_size) return error.InvalidOptions;
-    if (o.reserved != 0) return error.InvalidOptions;
     out.gfm_table = o.gfm_table != 0;
     out.gfm_task_list_item = o.gfm_task_list_item != 0;
     out.gfm_strikethrough = o.gfm_strikethrough != 0;
@@ -48,6 +47,7 @@ pub fn fromC(opts: ?*const lutez_opts) types.Error!types.Options {
     out.indent_code_block = o.indent_code_block != 0;
     out.link_ref = o.link_ref != 0;
     out.data_image = o.data_image != 0;
+    out.strip_bom = o.strip_bom != 0;
     return out;
 }
 
@@ -77,7 +77,7 @@ test "options ABI" {
     const p = try fromC(&o);
     try std.testing.expect(!p.gfm_table);
     const d = try fromC(null);
-    try std.testing.expect(d.gfm_table and d.setext and d.link_ref);
+    try std.testing.expect(d.gfm_table and d.setext and d.link_ref and d.strip_bom);
     o.struct_size = 4;
     try std.testing.expectError(error.InvalidOptions, fromC(&o));
 }

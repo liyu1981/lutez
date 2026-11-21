@@ -200,3 +200,22 @@ test "C ABI reports invalid options and NULL input" {
     try std.testing.expectEqual(@as(?*lutez_doc, null), lutez_parse(null, 0, &o));
     try std.testing.expectEqual(LUTEZ_ERR_INVALID_OPTIONS, lutez_last_error_code());
 }
+
+test "C ABI strip_bom option" {
+    const md = "\u{FEFF}- a\n- b\n";
+    var opts = std.mem.zeroes(lutez_opts);
+    opts.struct_size = LUTEZ_OPTS_V1_SIZE;
+    opts.strip_bom = 1;
+    const stripped = lutez_parse(md.ptr, md.len, &opts).?;
+    defer lutez_doc_free(stripped);
+    try std.testing.expectEqual(@as(i32, 7), lutez_node_type(stripped, 1)); // list
+
+    opts.strip_bom = 0;
+    const kept = lutez_parse(md.ptr, md.len, &opts).?;
+    defer lutez_doc_free(kept);
+    try std.testing.expectEqual(@as(i32, 1), lutez_node_type(kept, 1)); // paragraph
+    var start: u32 = 0;
+    var end: u32 = 0;
+    try std.testing.expectEqual(@as(u32, 1), lutez_node_span(kept, 1, &start, &end));
+    try std.testing.expectEqual(@as(u32, 0), start);
+}

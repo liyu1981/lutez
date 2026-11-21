@@ -182,6 +182,8 @@ pub const Options = struct {
     indent_code_block: bool = true,
     link_ref: bool = true,
     data_image: bool = true,
+    /// Strip a UTF-8 BOM at the start of the input (CommonMark-friendly default).
+    strip_bom: bool = true,
 
     pub const defaults: Options = .{};
 };
@@ -244,4 +246,5 @@ test "default options are all-on for scoped flags" {
     try std.testing.expect(o.gfm_strikethrough1 and o.gfm_auto_link);
     try std.testing.expect(o.inline_asterisk and o.inline_underscore and o.setext);
     try std.testing.expect(o.indent_code_block and o.link_ref and o.data_image);
+    try std.testing.expect(o.strip_bom);
 }

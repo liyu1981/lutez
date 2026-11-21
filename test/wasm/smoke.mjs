@@ -31,6 +31,15 @@ try {
 }
 if (threw) throw new Error("parse of NUL input should not fail");
 
+const empty = lutez.parse("");
+if (empty.nodeCount() !== 1) throw new Error("empty document should have one node");
+empty.free();
+
+const bom = lutez.parse("\uFEFF- a\n- b\n");
+if (bom.nodeType(1) !== 7) throw new Error(`BOM should be stripped, first child ${bom.nodeType(1)}`);
+if (bom.span(1)?.[0] !== 3) throw new Error(`BOM list span should start at raw 3, got ${bom.span(1)}`);
+bom.free();
+
 console.log(
   `wasm ok: ${bytes.length} bytes, 0 imports, abi ${lutez.abiVersion}, v${lutez.version}, nodes ${count}`,
 );

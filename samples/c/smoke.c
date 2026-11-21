@@ -15,6 +15,7 @@ int main(void) {
   opts.struct_size = (uint32_t)sizeof opts;
   opts.gfm_table = 1;
   opts.setext = 1;
+  opts.strip_bom = 1;
 
   const char *md = "# hello *world*\n\n- a\n- b\n";
   lutez_doc *doc = lutez_parse((const uint8_t *)md, strlen(md), &opts);

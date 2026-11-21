@@ -42,7 +42,7 @@ math + wikilinks in ~6–7 weeks; Logseq keywords and polish in the next 2–3 w
 | Text merging | `mergeText` allocates a new buffer and unlinks nodes (`src/parse/inline.zig`) | Adjacent text spans must be unioned before/while merging |
 | Token rewrites | entities decode, destinations percent-encode, labels fold, code-span newlines become spaces | Token bytes differ from source bytes; spans must come from the scanner, not from token content |
 | Lexer | CRLF→LF in place; NUL→U+FFFD via a replacement buffer; trailing `\n` appended (`src/lex/lexer.zig`) | Normalized offsets ≠ raw offsets; a map is required |
-| BOM | not stripped (BOM bytes are content today) | Keep this behaviour for parity unless opal_note requires stripping |
+| BOM | stripped by default in 0.2 via `strip_bom`; set 0 to preserve legacy content behaviour | Option covers both contracts; raw spans account for the 3-byte shift |
 | Wire v1 | 40-byte header, 48-byte node records, no offsets; `input_len = 0`; every token copied to the pool (`src/ast/wire.zig`, `doc/WIRE_FORMAT.md`) | Offsets are unrecoverable after serialization |
 | AST schema | closed 62-type whitelist; `NodeType` is a non-exhaustive enum but decoders reject unknown types | No room for adopter nodes |
 | Options / ABI | 16-byte versioned `lutez_opts`, 11 boolean flags (`src/abi.zig`) | No way to pass an extension spec |
@@ -102,8 +102,8 @@ src_flags                    : u8    // 0 = real span, 1 = derived/synthetic
 1. **Document source map (lexer + `parseWith`).**
    Build a compact list of change segments while copying/normalizing:
    `{norm_start, raw_start, norm_len, raw_len, kind}` for CRLF→LF, NUL→U+FFFD, and the
-   synthetic trailing newline. Unchanged regions are identity. BOM remains untouched in
-   0.2 (documented), so no BOM segment is emitted unless we later add stripping.
+   synthetic trailing newline. Unchanged regions are identity. When `strip_bom` is on
+   (default), a zero-width BOM segment maps normalized 0 to raw 3.
 2. **Absolute line offsets in `Context`.**
    Add `line_norm_start`, `line_raw_start`, `line_no`, and a `block_start_norm/raw` for the
    current construct. The lexer already advances line by line; pass both offsets.
