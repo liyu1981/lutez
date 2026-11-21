@@ -15,10 +15,12 @@ export interface LutezOptions {
 
 export declare class Doc {
   readonly handle: number;
-  /** Serialized AST (wire format v1). */
+  /** Serialized AST (wire format v2). */
   ast(): Uint8Array;
   nodeCount(): number;
   nodeType(node: number): number;
+  /** Raw [start, end) byte offsets in the original Markdown, or null. */
+  span(node: number): [number, number] | null;
   free(): void;
 }
 

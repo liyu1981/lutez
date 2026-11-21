@@ -32,9 +32,15 @@ pub fn parseAutolink(c: anytype, block: *node.Node) !?*node.Node {
     }
     if (!schemed or scheme_len < 3 or i == ctx.tokens_len) return try @import("inline_html.zig").parseInlineHTML(t, ctx);
     if (ctx.tokens[i] != lex.greater) return try @import("inline_html.zig").parseInlineHTML(t, ctx);
+    const start = ctx.pos;
     ctx.pos = 1 + i;
     const encoded = try html.encodeDestination(t.allocator, dest.items);
-    return try links.newLink(t, .link, dest.items, encoded, null, 2);
+    const link = try links.newLink(t, .link, dest.items, encoded, null, 2);
+    if (ctx.spanFor(start, ctx.pos)) |sp| {
+        link.setSpan(sp.start, sp.end);
+        node.fillSubtreeSpan(link, sp);
+    }
+    return link;
 }
 
 fn parseAutoEmailLink(c: anytype) !?*node.Node {
@@ -71,9 +77,15 @@ fn parseAutoEmailLink(c: anytype) !?*node.Node {
         if (j > 63) return null;
     }
     if (j < 1 or !closed) return null;
+    const start = ctx.pos;
     ctx.pos += passed + 1;
     const mailto = try std.mem.concat(t.allocator, u8, &.{ "mailto:", dest.items });
-    return try links.newLink(t, .link, dest.items, mailto, null, 2);
+    const link = try links.newLink(t, .link, dest.items, mailto, null, 2);
+    if (ctx.spanFor(start, ctx.pos)) |sp| {
+        link.setSpan(sp.start, sp.end);
+        node.fillSubtreeSpan(link, sp);
+    }
+    return link;
 }
 
 pub fn parseGFMAutoEmailLink(t: *tree.Tree, n: *node.Node) !void {
@@ -92,6 +104,7 @@ fn parseGFMAutoEmailLink0(t: *tree.Tree, n: *node.Node) !void {
     if (std.mem.indexOfScalar(u8, tokens, '@') == null or std.mem.indexOfScalar(u8, tokens, '@').? == 0) return;
     var i: usize = 0;
     while (i < tokens.len) {
+        const group_start = i;
         var j = i;
         var group: std.ArrayListUnmanaged(u8) = .empty;
         var at_index: usize = 0;
@@ -110,6 +123,7 @@ fn parseGFMAutoEmailLink0(t: *tree.Tree, n: *node.Node) !void {
             continue;
         }
         i = j;
+        const group_end = i;
         if (at_index == 0) {
             try addPreviousText(t, n, group.items);
             continue;
@@ -135,6 +149,10 @@ fn parseGFMAutoEmailLink0(t: *tree.Tree, n: *node.Node) !void {
             const g = group.items[0 .. group.items.len - 1];
             const mailto = try std.mem.concat(t.allocator, u8, &.{ "mailto:", g });
             const link = try links.newLink(t, .link, g, mailto, null, 2);
+            if (subSpan(n, group_start, group_end - 1)) |sp| {
+                link.setSpan(sp.start, sp.end);
+                node.fillSubtreeSpan(link, sp);
+            }
             n.insertBefore(link);
             try addPreviousText(t, n, group.items[group.items.len - 1 ..]);
         } else if (last == lex.hyphen or last == lex.underscore) {
@@ -149,6 +167,10 @@ fn parseGFMAutoEmailLink0(t: *tree.Tree, n: *node.Node) !void {
             const ld = try node.Node.create(t.allocator, .link_dest);
             ld.tokens = try std.mem.concat(t.allocator, u8, &.{ "mailto:", group.items });
             link.appendChild(ld);
+            if (subSpan(n, group_start, group_end)) |sp| {
+                link.setSpan(sp.start, sp.end);
+                node.fillSubtreeSpan(link, sp);
+            }
             n.insertBefore(link);
         }
     }
@@ -233,6 +255,19 @@ fn tldAllowed(suffix: []const u8) bool {
         }
     }
     return false;
+}
+
+fn subSpan(n: *node.Node, start_off: usize, end_off: usize) ?node.Span {
+    if (n.tokens.len == 0 or !n.hasSpan() or start_off > end_off or end_off > n.tokens.len) return null;
+    const buffer = if (n.token_buffer.len > 0) n.token_buffer else n.tokens;
+    if (n.token_map.len > 0) {
+        if (node.mapTokenSlice(buffer, n.token_map, n.tokens[start_off..end_off])) |sp| return sp;
+    }
+    const total_src = n.src_end - n.src_start;
+    const total_tok = n.tokens.len;
+    const s = n.src_start + @as(u32, @intCast((start_off * total_src) / total_tok));
+    const e = n.src_start + @as(u32, @intCast((end_off * total_src) / total_tok));
+    return .{ .start = s, .end = e };
 }
 
 fn isTrailingPunct(b: u8) bool {
@@ -329,17 +364,24 @@ fn parseGFMAutoLink0(t: *tree.Tree, n: *node.Node) !void {
         const dest_src = if (is_www) try std.mem.concat(t.allocator, u8, &.{ "http://", url }) else url;
         const encoded = try html.encodeDestination(t.allocator, dest_src);
         const link = try links.newLink(t, .link, url, encoded, null, 2);
+        const bounds = subSpan(n, i, dest_end);
+        if (bounds) |sp| {
+            link.setSpan(sp.start, sp.end);
+            node.fillSubtreeSpan(link, sp);
+        }
         const before = try t.allocator.dupe(u8, tokens[0..i]);
         const after = try t.allocator.dupe(u8, tokens[dest_end..]);
         if (before.len > 0) {
             const pre = try node.Node.create(t.allocator, .text);
             pre.tokens = before;
+            if (subSpan(n, 0, i)) |sp| pre.setSpan(sp.start, sp.end);
             n.insertBefore(pre);
         }
         n.insertBefore(link);
         if (after.len > 0) {
             const post = try node.Node.create(t.allocator, .text);
             post.tokens = after;
+            if (subSpan(n, dest_end, tokens.len)) |sp| post.setSpan(sp.start, sp.end);
             n.insertAfter(post);
         }
         n.unlink();

@@ -18,12 +18,18 @@ This records intentional differences so reviewers and consumers know what to exp
 
 ## Wire format vs `WIRE_FORMAT.md`
 
-- Header is **40 bytes** (the draft said 32); fields are the same plus an explicit
-  `reserved` word.
-- v1 puts **all tokens in the pool** (`flags` bit 0 = 1); the input section exists but is
+- Header is **40 bytes**; v2 uses the final word for `map_len`.
+- Node records are **56 bytes** in v2: token refs, normalized span, raw span, extras.
+  The v1 `data_ref/data_len` pair was unused and is replaced by spans.
+- v2 puts **all tokens in the pool** (`flags` bit 0 = 1); the input section exists but is
   empty. This avoids tracking which slices alias the normalized input.
-- `data` is not stored; `data_ref = 0xFFFFFFFF`. `lutez_node_data` returns the token bytes
-  (Lute has no in-scope node where `Data` differs from `Tokens` after our passes).
+- Spans are recorded by the parser, not derived from token bytes: block tokens are
+  assembled into new buffers, and inline nodes may hold decoded/encoded copies. A
+  per-block token-segment map bridges inline token offsets to normalized input offsets.
+- `Data` is not stored. `lutez_node_data` returns token bytes (Lute has no in-scope node
+  where `Data` differs from `Tokens` after our passes).
+- Raw spans are computed at encode time from the normalized spans and the source map
+  built during CRLF/CR/NUL/trailing-LF normalization.
 - `CodeBlock.fence_len` is `u8` in the extras blob (fences longer than 255 are a spec
   impossibility in practice; the parser still tracks `u32` in memory).
 - Extras layouts for `code_block`/`list`/`link`/`table`/`code_span` are as implemented in
@@ -51,6 +57,9 @@ This records intentional differences so reviewers and consumers know what to exp
 - Entity decoding uses the generated 2125-entry table from upstream `html.Entities`
   (semicolon required, matching Lute's `HtmlUnescapeString`).
 - The parser is reentrant and allocation-failure-safe; malformed Markdown never errors.
+- Source positions cover every node and are validated on both committed corpora
+  (`positions.zig` invariants). Lazy blockquote/list continuation lines extend ancestor
+  spans so a paragraph remains inside its blockquote/list item.
 - AST parity is defined for valid UTF-8 Markdown. Arbitrary invalid byte sequences are
   covered for crash/leak safety (Zig crash fuzzer), not for byte-level AST parity: upstream
   Lute itself has undefined-ish behavior there and the dual fuzz intentionally restricts

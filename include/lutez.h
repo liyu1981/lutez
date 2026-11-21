@@ -1,7 +1,7 @@
 /*
  * lutez — CommonMark 0.31.2 + GFM parser (Zig port of upstream lute)
  *
- * C ABI v1. Parses CommonMark 0.31.2 + GFM into a versioned binary AST; the
+ * C ABI v2. Parses CommonMark 0.31.2 + GFM into a versioned binary AST; the
  * document owns all memory until lutez_doc_free().
  *
  * Rules:
@@ -25,8 +25,8 @@
 extern "C" {
 #endif
 
-#define LUTEZ_ABI_VERSION 1u
-#define LUTEZ_WIRE_FORMAT_VERSION 1u
+#define LUTEZ_ABI_VERSION 2u
+#define LUTEZ_WIRE_FORMAT_VERSION 2u
 
 /* Error codes returned by lutez_last_error_code(). */
 enum {
@@ -67,6 +67,7 @@ typedef struct lutez_doc lutez_doc;
 
 const char *lutez_version_string(void);
 uint32_t lutez_abi_version(void);
+uint32_t lutez_wire_format_version(void);
 
 /* Parse UTF-8 markdown. Returns NULL on failure. The input is copied. */
 lutez_doc *lutez_parse(const uint8_t *md, size_t len, const lutez_opts *opts);
@@ -92,6 +93,12 @@ uint32_t lutez_node_parent(const lutez_doc *doc, uint32_t node);
 uint32_t lutez_node_first_child(const lutez_doc *doc, uint32_t node);
 uint32_t lutez_node_next(const lutez_doc *doc, uint32_t node);
 const uint8_t *lutez_node_data(const lutez_doc *doc, uint32_t node, size_t *out_len);
+
+/* Source spans: raw offsets into the caller's original bytes (primary contract),
+ * normalized offsets into the CRLF/NUL-normalized buffer, and a derived flag. */
+int lutez_node_span(const lutez_doc *doc, uint32_t node, uint32_t *out_start, uint32_t *out_end);
+int lutez_node_span_norm(const lutez_doc *doc, uint32_t node, uint32_t *out_start, uint32_t *out_end);
+int lutez_node_span_derived(const lutez_doc *doc, uint32_t node);
 
 /* ---- errors (thread-local, never NULL) --------------------------------- */
 

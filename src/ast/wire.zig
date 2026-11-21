@@ -1,28 +1,30 @@
-//! Binary AST wire format v1 (doc/WIRE_FORMAT.md): little-endian, index-based,
+//! Binary AST wire format v2 (doc/WIRE_FORMAT.md): little-endian, index-based,
 //! single contiguous buffer owned by the document.
 const std = @import("std");
 const node = @import("node.zig");
 const types = @import("../types.zig");
+const source = @import("../source.zig");
 
 pub const magic = "LUTEAST1";
-pub const version: u32 = 1;
+pub const version: u32 = 2;
 pub const header_len: usize = 40;
-pub const node_stride: usize = 48;
+pub const node_stride: usize = 56;
 pub const absent: u32 = 0xFFFF_FFFF;
 
 fn align8(n: usize) usize {
     return (n + 7) & ~@as(usize, 7);
 }
 
-const Sections = struct { nodes: usize, extras: usize, input: usize, pool: usize };
+const Sections = struct { nodes: usize, extras: usize, input: usize, pool: usize, map: usize };
 
-fn sections(node_count: u32, input_len: u32, pool_len: u32, ext_len: u32) Sections {
-    _ = pool_len;
+fn sections(node_count: u32, input_len: u32, pool_len: u32, ext_len: u32, map_len: u32) Sections {
+    _ = map_len;
     const nodes_off = header_len;
     const extras_off = align8(nodes_off + @as(usize, node_count) * node_stride);
     const input_off = align8(extras_off + ext_len);
     const pool_off = align8(input_off + input_len);
-    return .{ .nodes = nodes_off, .extras = extras_off, .input = input_off, .pool = pool_off };
+    const map_off = align8(pool_off + pool_len);
+    return .{ .nodes = nodes_off, .extras = extras_off, .input = input_off, .pool = pool_off, .map = map_off };
 }
 
 const Ctx = struct {
@@ -46,6 +48,7 @@ fn flagsOf(n: *node.Node) u16 {
     if (n.heading_setext) f |= 1 << 5;
     if (n.is_fenced_code_block) f |= 1 << 6;
     if (n.list_data.typ == 3 and n.list_data.checked) f |= 1 << 7;
+    if (n.src_derived) f |= 1 << 8;
     return f;
 }
 
@@ -116,13 +119,17 @@ fn putExt(a: std.mem.Allocator, out: *std.ArrayListUnmanaged(u8), n: *node.Node)
 }
 
 /// Encodes `root` into one contiguous buffer owned by `allocator`.
-pub fn encode(allocator: std.mem.Allocator, root: *node.Node, input: []const u8) ![]u8 {
+pub fn encode(allocator: std.mem.Allocator, root: *node.Node, input: []const u8, map: source.SourceMap) ![]u8 {
     var ctx = Ctx{ .allocator = allocator };
+    defer ctx.index.deinit(allocator);
+    defer ctx.nodes.deinit(allocator);
     try collect(&ctx, root);
     const count: u32 = @intCast(ctx.nodes.items.len);
 
     var pool: std.ArrayListUnmanaged(u8) = .empty;
+    defer pool.deinit(allocator);
     var extras: std.ArrayListUnmanaged(u8) = .empty;
+    defer extras.deinit(allocator);
     var tok_refs = try allocator.alloc(u32, count);
     defer allocator.free(tok_refs);
     var tok_lens = try allocator.alloc(u32, count);
@@ -152,8 +159,10 @@ pub fn encode(allocator: std.mem.Allocator, root: *node.Node, input: []const u8)
         }
     }
 
-    const secs = sections(count, @intCast(input.len), @intCast(pool.items.len), @intCast(extras.items.len));
-    const total = align8(secs.pool + pool.items.len);
+    const map_entry_len: usize = 20;
+    const map_len: u32 = @intCast(4 + map.segs.len * map_entry_len);
+    const secs = sections(count, @intCast(input.len), @intCast(pool.items.len), @intCast(extras.items.len), map_len);
+    const total = align8(secs.map + map_len);
     const buf = try allocator.alloc(u8, total);
     @memset(buf, 0);
     @memcpy(buf[0..8], magic);
@@ -164,11 +173,22 @@ pub fn encode(allocator: std.mem.Allocator, root: *node.Node, input: []const u8)
     std.mem.writeInt(u32, buf[24..28], @intCast(input.len), .little);
     std.mem.writeInt(u32, buf[28..32], @intCast(pool.items.len), .little);
     std.mem.writeInt(u32, buf[32..36], @intCast(extras.items.len), .little);
-    std.mem.writeInt(u32, buf[36..40], 0, .little);
+    std.mem.writeInt(u32, buf[36..40], map_len, .little);
 
     @memcpy(buf[secs.extras .. secs.extras + extras.items.len], extras.items);
     @memcpy(buf[secs.input .. secs.input + input.len], input);
     @memcpy(buf[secs.pool .. secs.pool + pool.items.len], pool.items);
+    std.mem.writeInt(u32, buf[secs.map..][0..4], @intCast(map.segs.len), .little);
+    for (map.segs, 0..) |seg, si| {
+        const off = secs.map + 4 + si * map_entry_len;
+        const e = buf[off .. off + map_entry_len];
+        std.mem.writeInt(u32, e[0..4], seg.norm_start, .little);
+        std.mem.writeInt(u32, e[4..8], seg.norm_len, .little);
+        std.mem.writeInt(u32, e[8..12], seg.raw_start, .little);
+        std.mem.writeInt(u32, e[12..16], seg.raw_len, .little);
+        e[16] = @backingInt(seg.kind);
+        @memset(e[17..20], 0);
+    }
 
     for (ctx.nodes.items, 0..) |n, i| {
         const off = secs.nodes + i * node_stride;
@@ -182,10 +202,17 @@ pub fn encode(allocator: std.mem.Allocator, root: *node.Node, input: []const u8)
         std.mem.writeInt(u32, rec[20..24], if (n.next) |p| ctx.index.get(p).? else absent, .little);
         std.mem.writeInt(u32, rec[24..28], tok_refs[i], .little);
         std.mem.writeInt(u32, rec[28..32], tok_lens[i], .little);
-        std.mem.writeInt(u32, rec[32..36], absent, .little); // data_ref
-        std.mem.writeInt(u32, rec[36..40], 0, .little);
-        std.mem.writeInt(u32, rec[40..44], ext_refs[i], .little);
-        std.mem.writeInt(u32, rec[44..48], ext_lens[i], .little);
+        const has = n.hasSpan();
+        const ns = if (has) n.src_start else 0;
+        const ne = if (has) n.src_end else 0;
+        const rs = if (has) map.normToRawStart(ns) else 0;
+        const re = if (has) map.normToRawEnd(ne) else 0;
+        std.mem.writeInt(u32, rec[32..36], ns, .little);
+        std.mem.writeInt(u32, rec[36..40], ne, .little);
+        std.mem.writeInt(u32, rec[40..44], rs, .little);
+        std.mem.writeInt(u32, rec[44..48], re, .little);
+        std.mem.writeInt(u32, rec[48..52], ext_refs[i], .little);
+        std.mem.writeInt(u32, rec[52..56], ext_lens[i], .little);
     }
     return buf;
 }
@@ -228,8 +255,9 @@ pub fn decode(allocator: std.mem.Allocator, buf: []const u8) Error!*node.Node {
     const input_len = std.mem.readInt(u32, buf[24..28], .little);
     const pool_len = std.mem.readInt(u32, buf[28..32], .little);
     const ext_len = std.mem.readInt(u32, buf[32..36], .little);
-    const secs = sections(count, input_len, pool_len, ext_len);
-    if (secs.pool + pool_len > buf.len) return error.BadWire;
+    const map_len = std.mem.readInt(u32, buf[36..40], .little);
+    const secs = sections(count, input_len, pool_len, ext_len, map_len);
+    if (secs.map + map_len > buf.len) return error.BadWire;
 
     const nodes = try allocator.alloc(*node.Node, count);
     var i: u32 = 0;
@@ -245,14 +273,17 @@ pub fn decode(allocator: std.mem.Allocator, buf: []const u8) Error!*node.Node {
         n.last_line_checked = flags & (1 << 4) != 0;
         n.heading_setext = flags & (1 << 5) != 0;
         n.is_fenced_code_block = flags & (1 << 6) != 0;
+        n.src_derived = flags & (1 << 8) != 0;
+        n.src_start = std.mem.readInt(u32, rec[32..36], .little);
+        n.src_end = std.mem.readInt(u32, rec[36..40], .little);
         const tok_ref = std.mem.readInt(u32, rec[24..28], .little);
         const tok_len = std.mem.readInt(u32, rec[28..32], .little);
         if (tok_ref != absent) {
             if (tok_ref + tok_len > pool_len) return error.BadWire;
             n.tokens = try allocator.dupe(u8, buf[secs.pool + tok_ref .. secs.pool + tok_ref + tok_len]);
         }
-        const ext_ref = std.mem.readInt(u32, rec[40..44], .little);
-        const ext_len2 = std.mem.readInt(u32, rec[44..48], .little);
+        const ext_ref = std.mem.readInt(u32, rec[48..52], .little);
+        const ext_len2 = std.mem.readInt(u32, rec[52..56], .little);
         if (ext_ref != absent) {
             if (ext_ref + ext_len2 > ext_len) return error.BadWire;
             var r = Reader{ .buf = buf[secs.extras + ext_ref .. secs.extras + ext_ref + ext_len2], .off = 0 };
@@ -342,7 +373,7 @@ test "wire roundtrip preserves the canonical AST dump" {
     defer doc.deinit();
     const before = try dump.dump(std.testing.allocator, doc.root);
     defer std.testing.allocator.free(before);
-    const wire = try encode(a, doc.root, md);
+    const wire = try encode(a, doc.root, md, doc.source_map);
     const root2 = try decode(a, wire);
     const after = try dump.dump(std.testing.allocator, root2);
     defer std.testing.allocator.free(after);

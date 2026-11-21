@@ -38,7 +38,7 @@ int main(void) {
   if (!doc) { fprintf(stderr, "%s\n", lutez_last_error()); return 1; }
 
   size_t len;
-  const uint8_t *ast = lutez_doc_ast(doc, &len);   /* wire format v1 */
+  const uint8_t *ast = lutez_doc_ast(doc, &len);   /* wire format v2 */
   printf("%u nodes, %zu AST bytes\n", lutez_node_count(doc), len);
   lutez_doc_free(doc);
 }
@@ -60,7 +60,7 @@ import { Lutez } from "./js/lutez.mjs";
 
 const lutez = await Lutez.load("zig-out/lib/lutez.wasm");
 const doc = lutez.parse("# hi *em*\n", { gfmTable: true });
-const ast = doc.ast();            // Uint8Array, wire format v1
+const ast = doc.ast();            // Uint8Array, wire format v2
 console.log(doc.nodeCount(), doc.nodeType(0));
 doc.free();
 ```

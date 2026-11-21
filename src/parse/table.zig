@@ -7,7 +7,7 @@ const lex = @import("../lex/token.zig");
 const tree = @import("tree.zig");
 
 pub fn startFromSetext(t: *tree.Tree, p: *node.Node) !bool {
-    const t0 = try parseTable0(t, p.tokens);
+    const t0 = try parseTable0(t, p, p.tokens);
     if (t0) |table| {
         p.typ = .table;
         p.table_aligns = table.table_aligns;
@@ -25,7 +25,7 @@ pub fn finalizeParagraph(ctx: *tree.Context, p: *node.Node) !bool {
     while (i < p.tokens.len) : (i += 1) {
         if (p.tokens[i] == lex.newline or i == 0) {
             tokens = if (i == 0) p.tokens[i..] else p.tokens[i + 1 ..];
-            if (try parseTable0(ctx.tree, tokens)) |table| {
+            if (try parseTable0(ctx.tree, p, tokens)) |table| {
                 var para_tokens: ?[]u8 = null;
                 if (line_cnt > 0) para_tokens = p.tokens[0..i];
                 if (para_tokens) |pt| {
@@ -39,6 +39,7 @@ pub fn finalizeParagraph(ctx: *tree.Context, p: *node.Node) !bool {
                     p.typ = .table;
                     p.table_aligns = table.table_aligns;
                     while (table.first_child) |tr| p.appendChild(tr);
+                    if (table.hasSpan()) p.setSpan(table.src_start, table.src_end);
                     return true;
                 }
             }
@@ -48,7 +49,7 @@ pub fn finalizeParagraph(ctx: *tree.Context, p: *node.Node) !bool {
     return false;
 }
 
-fn parseTable0(t: *tree.Tree, tokens: []u8) !?*node.Node {
+fn parseTable0(t: *tree.Tree, p: *node.Node, tokens: []u8) !?*node.Node {
     if (std.mem.indexOfScalar(u8, tokens, lex.pipe) == null and !noPipeSingleColTable(tokens)) return null;
     const lines = try lex.split(t.allocator, tokens, lex.newline);
     if (lines.items.len < 2) return null;
@@ -56,13 +57,15 @@ fn parseTable0(t: *tree.Tree, tokens: []u8) !?*node.Node {
     if (delim_row.len < 2) return null;
     const aligns = (try parseTableDelimRow(t.allocator, @constCast(delim_row))) orelse return null;
     if (lines.items.len == 2 and aligns.len == 1 and aligns[0] == 0 and std.mem.indexOfScalar(u8, tokens, lex.pipe) == null) return null;
-    const head_row = (try parseTableRow(t, @constCast(lex.trimWhitespace(lines.items[0])), aligns, true)) orelse return null;
+    const head_row = (try parseTableRow(t, p, @constCast(lex.trimWhitespace(lines.items[0])), aligns, true)) orelse return null;
     const table = try node.Node.create(t.allocator, .table);
     table.table_aligns = aligns;
+    const buf = bufferOf(p);
+    if (node.mapTokenSlice(buf, p.token_map, tokens)) |sp| table.setSpan(sp.start, sp.end) else table.setSpan(p.src_start, p.src_end);
     table.appendChild(try newTableHead(t, head_row));
     var i: usize = 2;
     while (i < lines.items.len) : (i += 1) {
-        const row = (try parseTableRow(t, @constCast(lex.trimWhitespace(lines.items[i])), aligns, false)) orelse return null;
+        const row = (try parseTableRow(t, p, @constCast(lex.trimWhitespace(lines.items[i])), aligns, false)) orelse return null;
         table.appendChild(row);
     }
     return table;
@@ -71,9 +74,15 @@ fn parseTable0(t: *tree.Tree, tokens: []u8) !?*node.Node {
 fn newTableHead(t: *tree.Tree, head_row: *node.Node) !*node.Node {
     const ret = try node.Node.create(t.allocator, .table_head);
     const tr = try node.Node.create(t.allocator, .table_row);
+    tr.setSpan(head_row.src_start, head_row.src_end);
+    ret.setSpan(head_row.src_start, head_row.src_end);
     ret.appendChild(tr);
     while (head_row.first_child) |c| tr.appendChild(c);
     return ret;
+}
+
+fn bufferOf(p: *node.Node) []u8 {
+    return if (p.token_buffer.len > 0) p.token_buffer else p.tokens;
 }
 
 fn inInline(tokens: []const u8, i: usize, marker: u8) bool {
@@ -99,7 +108,7 @@ fn noPipeSingleColTable(tokens: []const u8) bool {
     return true;
 }
 
-fn parseTableRow(t: *tree.Tree, line_in: []u8, aligns: []u8, is_head: bool) !?*node.Node {
+fn parseTableRow(t: *tree.Tree, p: *node.Node, line_in: []u8, aligns: []u8, is_head: bool) !?*node.Node {
     var line = line_in;
     if (std.mem.indexOf(u8, line, "\\|")) |idx| {
         if (idx > 0 and inInline(line, idx, lex.backtick)) line = try replaceAll(t.allocator, line, "\\|", "\\&#124;");
@@ -114,6 +123,8 @@ fn parseTableRow(t: *tree.Tree, line_in: []u8, aligns: []u8, is_head: bool) !?*n
     if (is_head and cols_len > aligns.len) return null;
     const ret = try node.Node.create(t.allocator, .table_row);
     ret.table_aligns = aligns;
+    const buf = bufferOf(p);
+    if (node.mapTokenSlice(buf, p.token_map, line)) |sp| ret.setSpan(sp.start, sp.end) else ret.setSpan(p.src_start, p.src_end);
     var i: usize = 0;
     while (i < cols_len and i < aligns.len) : (i += 1) {
         var col = lex.trimWhitespace(cols.items[first + i]);
@@ -121,11 +132,15 @@ fn parseTableRow(t: *tree.Tree, line_in: []u8, aligns: []u8, is_head: bool) !?*n
         const cell = try node.Node.create(t.allocator, .table_cell);
         cell.table_cell_align = aligns[i];
         cell.tokens = @constCast(col);
+        cell.token_buffer = buf;
+        cell.token_map = p.token_map;
+        if (node.mapTokenSlice(buf, p.token_map, col)) |sp| cell.setSpan(sp.start, sp.end) else cell.setSpan(ret.src_start, ret.src_end);
         ret.appendChild(cell);
     }
     while (i < aligns.len) : (i += 1) {
         const cell = try node.Node.create(t.allocator, .table_cell);
         cell.table_cell_align = aligns[i];
+        cell.setDerivedSpan(ret.src_end);
         ret.appendChild(cell);
     }
     return ret;

@@ -7,6 +7,8 @@ src/lex/token.zig	lex/token.go	ported
 src/lex/lexer.zig	lex/lexer.go	ported
 src/ast/node.zig	ast/node.go	ported
 src/ast/dump.zig	-	new
+src/source.zig	-	new
+src/positions.zig	-	new
 src/ast/wire.zig	-	new
 src/types.zig	ast/node.go + parse/parse.go	ported
 src/html/entity_tables.zig	html/entity.go	generated

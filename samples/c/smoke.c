@@ -32,6 +32,10 @@ int main(void) {
   assert(lutez_node_type(doc, 0) == 0); /* document */
   assert(lutez_node_type(doc, 1) == 2); /* heading */
   assert(lutez_node_parent(doc, 0) == (uint32_t)LUTEZ_NULL_NODE);
+  uint32_t span_start = 1, span_end = 0;
+  assert(lutez_node_span(doc, 1, &span_start, &span_end));
+  assert(span_start == 0 && span_end >= 7); /* "# hello" */
+  assert(lutez_wire_format_version() == LUTEZ_WIRE_FORMAT_VERSION);
 
   printf("ast: %zu bytes, %u nodes, first child type=%d\n", len, lutez_node_count(doc),
          (int)lutez_node_type(doc, 1));

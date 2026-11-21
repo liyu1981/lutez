@@ -28,6 +28,29 @@ pub const InlineContext = struct {
     pos: usize = 0,
     delimiters: ?*Delimiter = null,
     brackets: ?*Delimiter = null,
+
+    /// Inline position provenance (see `Node.token_map`).
+    token_buffer: []u8 = &.{},
+    token_map: []const node.TokenSeg = &.{},
+
+    pub fn spanFor(self: *InlineContext, start: usize, end: usize) ?node.Span {
+        if (start >= end or end > self.tokens.len) return null;
+        return node.mapTokenSlice(self.token_buffer, self.token_map, self.tokens[start..end]);
+    }
+
+    pub fn setSpanFor(self: *InlineContext, n: *node.Node, start: usize, end: usize) void {
+        if (self.spanFor(start, end)) |sp| n.setSpan(sp.start, sp.end) else n.setDerivedSpan(self.sourcePos(start));
+    }
+
+    pub fn sourcePos(self: *InlineContext, pos: usize) u32 {
+        if (self.token_map.len == 0 or self.tokens.len == 0) return 0;
+        const p = @min(pos, self.tokens.len);
+        if (p < self.tokens.len) {
+            if (node.mapTokenSlice(self.token_buffer, self.token_map, self.tokens[p .. p + 1])) |sp| return sp.start;
+        }
+        if (node.mapTokenSlice(self.token_buffer, self.token_map, self.tokens[self.tokens.len - 1 ..])) |sp| return sp.end;
+        return 0;
+    }
 };
 
 const Ctx = struct {
@@ -43,6 +66,7 @@ pub fn handleDelim(c: Ctx, block: *node.Node) !void {
     const text = c.ictx.tokens[start_pos..c.ictx.pos];
     const n = try node.Node.create(c.allocator, .text);
     n.tokens = text;
+    c.ictx.setSpanFor(n, start_pos, c.ictx.pos);
     block.appendChild(n);
     if (scanned.can_open or scanned.can_close) {
         const d = try c.allocator.create(Delimiter);

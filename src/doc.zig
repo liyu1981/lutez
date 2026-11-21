@@ -14,7 +14,7 @@ pub const Document = struct {
         errdefer backing.destroy(self);
         self.doc = try lutez.parseWith(backing, input, options);
         errdefer self.doc.deinit();
-        self.wire = try wire.encode(self.doc.arena.allocator(), self.doc.root, &.{});
+        self.wire = try wire.encode(self.doc.arena.allocator(), self.doc.root, &.{}, self.doc.source_map);
         return self;
     }
 
@@ -40,6 +40,8 @@ pub const View = struct {
     pub fn init(buf: []const u8) ?View {
         if (buf.len < wire.header_len) return null;
         if (!std.mem.eql(u8, buf[0..8], wire.magic)) return null;
+        const version = std.mem.readInt(u32, buf[8..12], .little);
+        if (version != wire.version) return null;
         const count = std.mem.readInt(u32, buf[16..20], .little);
         const stride = std.mem.readInt(u32, buf[20..24], .little);
         const input_len = std.mem.readInt(u32, buf[24..28], .little);
@@ -62,6 +64,21 @@ pub const View = struct {
     pub fn nodeType(self: View, i: u32) i32 {
         const r = self.rec(i) orelse return -1;
         return std.mem.readInt(u16, r[0..2], .little);
+    }
+
+    pub fn span(self: View, i: u32, normalized: bool) ?struct { start: u32, end: u32 } {
+        const r = self.rec(i) orelse return null;
+        const off: usize = if (normalized) 32 else 40;
+        return .{
+            .start = std.mem.readInt(u32, r[off..][0..4], .little),
+            .end = std.mem.readInt(u32, r[off + 4 ..][0..4], .little),
+        };
+    }
+
+    pub fn derived(self: View, i: u32) bool {
+        const r = self.rec(i) orelse return false;
+        const flags = std.mem.readInt(u16, r[2..4], .little);
+        return flags & (1 << 8) != 0;
     }
 
     pub fn child(self: View, i: u32, last: bool) u32 {

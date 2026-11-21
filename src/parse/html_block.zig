@@ -32,9 +32,11 @@ pub fn start(t: *tree.Tree, container: *node.Node) !u8 {
     const tokens = ctx.current_line[ctx.next_nonspace..];
     const html_type = parseHTML(t, tokens);
     if (html_type == 0) return 0;
+    const pos = ctx.abs(ctx.next_nonspace);
     ctx.closeUnmatchedBlocks();
     const block = try ctx.addChild(.html_block);
     block.html_block_type = html_type;
+    block.setSpan(pos, ctx.line_trimmed_end_norm);
     return 2;
 }
 

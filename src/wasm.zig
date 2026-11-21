@@ -106,3 +106,43 @@ export fn lutez_last_error_ptr() u64 {
 
 /// Entry symbol: Zig 0.17 cannot pass `-fno-entry`; JS never calls this.
 pub fn main() void {}
+
+export fn lutez_wire_format_version() u32 {
+    return types.wire_format_version;
+}
+
+export fn lutez_node_span(handle: u32, node: u32, out_start: u32, out_end: u32) u32 {
+    const d = docFor(handle) orelse return 0;
+    const v = doc_mod.View.init(d.ast()) orelse return 0;
+    const sp = v.span(node, false) orelse return 0;
+    if (out_start != 0) {
+        const p: *u32 = @ptrFromInt(out_start);
+        p.* = sp.start;
+    }
+    if (out_end != 0) {
+        const p: *u32 = @ptrFromInt(out_end);
+        p.* = sp.end;
+    }
+    return 1;
+}
+
+export fn lutez_node_span_norm(handle: u32, node: u32, out_start: u32, out_end: u32) u32 {
+    const d = docFor(handle) orelse return 0;
+    const v = doc_mod.View.init(d.ast()) orelse return 0;
+    const sp = v.span(node, true) orelse return 0;
+    if (out_start != 0) {
+        const p: *u32 = @ptrFromInt(out_start);
+        p.* = sp.start;
+    }
+    if (out_end != 0) {
+        const p: *u32 = @ptrFromInt(out_end);
+        p.* = sp.end;
+    }
+    return 1;
+}
+
+export fn lutez_node_span_derived(handle: u32, node: u32) u32 {
+    const d = docFor(handle) orelse return 0;
+    const v = doc_mod.View.init(d.ast()) orelse return 0;
+    return @intFromBool(v.derived(node));
+}

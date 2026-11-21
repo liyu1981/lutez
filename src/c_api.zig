@@ -1,4 +1,4 @@
-//! lutez C ABI v1: opaque documents, wire AST, ergonomic accessors, thread-local errors.
+//! lutez C ABI v2: opaque documents, wire AST, ergonomic accessors, thread-local errors.
 const std = @import("std");
 const lutez = @import("lutez");
 const types = lutez.types;
@@ -6,6 +6,7 @@ const abi = lutez.abi;
 const doc_mod = lutez.document;
 
 pub const LUTEZ_ABI_VERSION: u32 = types.abi_version;
+pub const LUTEZ_WIRE_FORMAT_VERSION: u32 = types.wire_format_version;
 pub const lutez_opts = abi.lutez_opts;
 pub const LUTEZ_OPTS_V1_SIZE: u32 = abi.opts_v1_size;
 pub const lutez_doc = opaque {};
@@ -47,6 +48,10 @@ export fn lutez_version_string() [*:0]const u8 {
 
 export fn lutez_abi_version() u32 {
     return LUTEZ_ABI_VERSION;
+}
+
+export fn lutez_wire_format_version() u32 {
+    return LUTEZ_WIRE_FORMAT_VERSION;
 }
 
 export fn lutez_last_error() [*:0]const u8 {
@@ -130,6 +135,34 @@ export fn lutez_node_next(doc: ?*const lutez_doc, node: u32) u32 {
     return v.sibling(node, true);
 }
 
+export fn lutez_node_span(doc: ?*const lutez_doc, node: u32, out_start: ?*u32, out_end: ?*u32) u32 {
+    if (out_start) |p| p.* = 0;
+    if (out_end) |p| p.* = 0;
+    const d = impl(doc) orelse return 0;
+    const v = doc_mod.View.init(d.ast()) orelse return 0;
+    const sp = v.span(node, false) orelse return 0;
+    if (out_start) |p| p.* = sp.start;
+    if (out_end) |p| p.* = sp.end;
+    return 1;
+}
+
+export fn lutez_node_span_norm(doc: ?*const lutez_doc, node: u32, out_start: ?*u32, out_end: ?*u32) u32 {
+    if (out_start) |p| p.* = 0;
+    if (out_end) |p| p.* = 0;
+    const d = impl(doc) orelse return 0;
+    const v = doc_mod.View.init(d.ast()) orelse return 0;
+    const sp = v.span(node, true) orelse return 0;
+    if (out_start) |p| p.* = sp.start;
+    if (out_end) |p| p.* = sp.end;
+    return 1;
+}
+
+export fn lutez_node_span_derived(doc: ?*const lutez_doc, node: u32) u32 {
+    const d = impl(doc) orelse return 0;
+    const v = doc_mod.View.init(d.ast()) orelse return 0;
+    return @intFromBool(v.derived(node));
+}
+
 export fn lutez_node_data(doc: ?*const lutez_doc, node: u32, out_len: ?*usize) ?[*]const u8 {
     if (out_len) |p| p.* = 0;
     const d = impl(doc) orelse return null;
@@ -143,13 +176,18 @@ test "C ABI parses and exposes the wire AST" {
     const md = "# hi *em*\n";
     const doc = lutez_parse(md.ptr, md.len, null).?;
     defer lutez_doc_free(doc);
-    try std.testing.expect(lutez_doc_abi_version(doc) == 1);
+    try std.testing.expect(lutez_doc_abi_version(doc) == 2);
     try std.testing.expect(lutez_node_count(doc) >= 3);
     try std.testing.expectEqual(@as(i32, 0), lutez_node_type(doc, 0));
     var len: usize = 0;
     const ast = lutez_doc_ast(doc, &len).?;
     try std.testing.expect(len > 40);
     try std.testing.expectEqualStrings("LUTEAST1", ast[0..8]);
+    var s0: u32 = 1;
+    var e0: u32 = 2;
+    try std.testing.expectEqual(@as(u32, 1), lutez_node_span(doc, 0, &s0, &e0));
+    try std.testing.expectEqual(@as(u32, 0), s0);
+    try std.testing.expect(e0 >= 6);
     try std.testing.expectEqual(types.null_node, lutez_node_parent(doc, 0));
 }
 

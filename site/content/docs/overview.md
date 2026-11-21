@@ -39,7 +39,7 @@ The in-memory tree uses pointer links into a per-document arena; the serialized 
 `u32` indices, so it is safe for WASM32 and trivially copyable. See
 [porting notes](./porting-notes.md) for why.
 
-## Parity and performance (v0.1.0)
+## Parity and performance (v0.2.0)
 
 | Check | Result |
 |---|---|
@@ -48,7 +48,7 @@ The in-memory tree uses pointer links into a per-document arena; the serialized 
 | Live differential (Go oracle ↔ C ABI) | **652/652** |
 | HTML oracle (upstream renderer over our AST) | **652/652** byte-identical |
 | Spec-corpus parse time | **0.91 ms** vs 3.54 ms upstream Go |
-| WASM artifact | **216,714 B**, zero imports |
+| WASM artifact | **230,254 B**, zero imports |
 
 Measurements and commands live in [benchmarks](./benchmarks.md).
 

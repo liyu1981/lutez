@@ -8,6 +8,8 @@ const html = @import("../html/escape.zig");
 const tree = @import("tree.zig");
 const blocks = @import("blocks.zig");
 
+const Span = node.Span;
+
 pub const Tree = tree.Tree;
 pub const Context = tree.Context;
 
@@ -82,7 +84,7 @@ pub fn parseLinkLabel(allocator: std.mem.Allocator, tokens: []u8) !?Label {
     return .{ .n = passed.items.len, .remains = remains, .label = lab };
 }
 
-const Title = struct { valid: bool = false, passed: []u8 = &.{}, remains: []u8 = &.{}, title: []u8 = &.{} };
+const Title = struct { valid: bool = false, passed: []u8 = &.{}, remains: []u8 = &.{}, title: []u8 = &.{}, src_start: usize = 0, src_end: usize = 0 };
 
 pub fn parseLinkTitle(allocator: std.mem.Allocator, tokens: []u8) !Title {
     if (tokens.len < 1) return .{ .valid = true, .remains = tokens };
@@ -124,6 +126,8 @@ fn parseLinkTitleMatch(allocator: std.mem.Allocator, opener: u8, closer: u8, tok
         .passed = try passed.toOwnedSlice(allocator),
         .remains = tokens[i + 1 ..],
         .title = try title.toOwnedSlice(allocator),
+        .src_start = 0,
+        .src_end = i + 1,
     };
 }
 
@@ -205,7 +209,14 @@ fn parseLinkDest1(allocator: std.mem.Allocator, tokens: []u8) !Dest {
     return .{ .ret = try ret.toOwnedSlice(allocator), .remains = tokens[i + 1 ..], .destination = try dest.toOwnedSlice(allocator) };
 }
 
-pub const InlineDest = struct { passed: ?[]u8 = null, remains: []u8 = &.{}, destination: []u8 = &.{} };
+pub const InlineDest = struct {
+    passed: ?[]u8 = null,
+    remains: []u8 = &.{},
+    destination: []u8 = &.{},
+    /// Source range of the destination inside the tokens passed to parseInlineLinkDest.
+    src_start: usize = 0,
+    src_end: usize = 0,
+};
 
 pub fn parseInlineLinkDest(alloc: std.mem.Allocator, options: @import("../types.zig").Options, tokens: []u8) !InlineDest {
     if (tokens.len < 2) return .{};
@@ -213,6 +224,8 @@ pub fn parseInlineLinkDest(alloc: std.mem.Allocator, options: @import("../types.
     var dest: std.ArrayListUnmanaged(u8) = .empty;
     var remains: []u8 = &.{};
     const pointy = tokens[1] == lex.less;
+    var src_start: usize = 0;
+    var src_end: usize = 0;
     if (pointy) {
         var matched = false;
         try passed.append(alloc, tokens[0]);
@@ -230,6 +243,8 @@ pub fn parseInlineLinkDest(alloc: std.mem.Allocator, options: @import("../types.
             if (n != 0) try dest.appendSlice(alloc, buf[0..n]);
             if (b == lex.greater and !lex.isBackslashEscapePunct(tokens, i)) {
                 if (dest.items.len > 0) dest.items.len -= 1;
+                src_start = 2;
+                src_end = i;
                 matched = true;
                 break;
             }
@@ -255,11 +270,13 @@ pub fn parseInlineLinkDest(alloc: std.mem.Allocator, options: @import("../types.
             if (n != 0) try dest.appendSlice(alloc, buf[0..n]);
             if (!dest_started and !lex.isWhitespace(b) and i > 0) {
                 dest_started = true;
+                src_start = i;
                 const trimmed = lex.trimWhitespace(dest.items[1..]);
                 std.mem.copyForwards(u8, dest.items[0..trimmed.len], trimmed);
                 dest.items.len = trimmed.len;
             }
             if (dest_started and (lex.isWhitespace(b) or lex.isControl(b))) {
+                src_end = i;
                 if (dest.items.len >= d.len) dest.items.len -= d.len;
                 if (passed.items.len > 0) passed.items.len -= 1;
                 open_parens -= 1;
@@ -269,6 +286,7 @@ pub fn parseInlineLinkDest(alloc: std.mem.Allocator, options: @import("../types.
             if (b == lex.close_paren and !lex.isBackslashEscapePunct(tokens, i)) {
                 open_parens -= 1;
                 if (open_parens < 1) {
+                    src_end = i;
                     if (dest.items.len > 0 and dest.items[0] == lex.open_paren) _ = dest.orderedRemove(0);
                     if (dest.items.len > 0) dest.items.len -= 1;
                     break;
@@ -286,7 +304,7 @@ pub fn parseInlineLinkDest(alloc: std.mem.Allocator, options: @import("../types.
         const un = try blocks.unescapeBytes(alloc, destination);
         destination = try html.encodeDestination(alloc, un);
     }
-    return .{ .passed = try passed.toOwnedSlice(alloc), .remains = remains, .destination = destination };
+    return .{ .passed = try passed.toOwnedSlice(alloc), .remains = remains, .destination = destination, .src_start = src_start, .src_end = src_end };
 }
 
 /// parseLinkRefDef returns the remaining tokens when a definition was consumed.
@@ -324,12 +342,28 @@ pub fn parseLinkRefDef(ctx: *Context, tokens: []u8) !?[]u8 {
     const def = try node.Node.create(ctx.tree.allocator, .link_ref_def);
     def.tokens = lab.label;
     def.appendChild(link);
-    var def_block = ctx.tip;
+
+    const holder = ctx.tip;
+    const buffer = if (holder.token_buffer.len > 0) holder.token_buffer else holder.tokens;
+    const start_off: u32 = @intCast(@intFromPtr(tokens.ptr) - @intFromPtr(buffer.ptr));
+    const end_off: u32 = @intCast(@intFromPtr(final_remains.ptr) - @intFromPtr(buffer.ptr));
+    const span = node.mapTokenRange(buffer, holder.token_map, start_off, end_off) orelse
+        Span{ .start = holder.src_start, .end = holder.src_end };
+    def.setSpan(span.start, span.end);
+    link.setSpan(span.start, span.end);
+    node.fillSubtreeSpan(link, span);
+
+    var def_block = holder;
     if (def_block.typ != .link_ref_def_block) {
         def_block = try node.Node.create(ctx.tree.allocator, .link_ref_def_block);
     }
     def_block.appendChild(def);
-    if (ctx.tip.parent) |p| p.appendChild(def_block);
+    if (!def_block.hasSpan()) {
+        def_block.setSpan(span.start, span.end);
+    } else {
+        def_block.setSpan(@min(def_block.src_start, span.start), @max(def_block.src_end, span.end));
+    }
+    if (holder.parent) |p| p.appendChild(def_block);
 
     // Register in the label index for inline resolution.
     const folded = try foldLabel(ctx.tree.allocator, lab.label);

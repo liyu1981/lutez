@@ -2,13 +2,13 @@
 //
 //   const lutez = await Lutez.load("zig-out/lib/lutez.wasm");
 //   const doc = lutez.parse("# hi\n");
-//   const ast = doc.ast();            // Uint8Array (wire format v1)
+//   const ast = doc.ast();            // Uint8Array (wire format v2)
 //   doc.nodeType(0);                  // 0 = document
 //   doc.free();
 //
 // Any call may grow WASM memory: `doc.ast()` and node data create fresh views.
 
-const ABI = 1;
+const ABI = 2;
 const OPTS_SIZE = 16;
 const NULL_NODE = 0xffffffff;
 
@@ -130,7 +130,7 @@ export class Doc {
     return this.#handle;
   }
 
-  /// Serialized AST (wire format v1).
+  /// Serialized AST (wire format v2).
   ast() {
     this.#check();
     const packed = this.#x.lutez_doc_ast(this.#handle);
@@ -147,6 +147,19 @@ export class Doc {
   nodeType(node) {
     this.#check();
     return this.#x.lutez_node_type(this.#handle, node);
+  }
+
+  span(node) {
+    this.#check();
+    const x = this.#x;
+    const s = x.lutez_alloc(4);
+    const e = x.lutez_alloc(4);
+    if (!x.lutez_node_span(this.#handle, node, s, e)) return null;
+    const mem = new DataView(x.memory.buffer);
+    const out = [mem.getUint32(s, true), mem.getUint32(e, true)];
+    x.lutez_free(s, 4);
+    x.lutez_free(e, 4);
+    return out;
   }
 
   free() {

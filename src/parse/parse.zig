@@ -3,17 +3,17 @@ const std = @import("std");
 const types = @import("../types.zig");
 const node = @import("../ast/node.zig");
 const tree = @import("tree.zig");
+const source = @import("../source.zig");
 
 pub const Tree = tree.Tree;
 pub const Context = tree.Context;
 
 pub fn parse(allocator: std.mem.Allocator, markdown: []const u8, options: types.Options) !*Tree {
-    // The lexer mutates input (CRLF, NUL); give it an arena copy with a trailing LF.
-    var buf: std.ArrayListUnmanaged(u8) = .empty;
-    try buf.appendSlice(allocator, markdown);
-    if (buf.items.len > 0 and buf.items[buf.items.len - 1] != '\n') try buf.append(allocator, '\n');
+    // Normalize up front (CRLF/CR -> LF, NUL -> U+FFFD, trailing LF) and keep the
+    // raw<->normalized offset map for source spans.
+    const norm = try source.normalize(allocator, markdown);
     const t = try allocator.create(Tree);
-    try t.init(allocator, try buf.toOwnedSlice(allocator), options);
+    try t.init(allocator, norm.bytes, options, norm.map);
     try t.parseBlocks();
     try @import("inline.zig").parseInlines(t);
     return t;

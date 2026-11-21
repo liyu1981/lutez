@@ -7,6 +7,7 @@ const node = @import("../ast/node.zig");
 const lex = @import("../lex/lexer.zig");
 const token = @import("../lex/token.zig");
 const blocks = @import("blocks.zig");
+const source = @import("../source.zig");
 
 pub const Options = types.Options;
 
@@ -36,6 +37,21 @@ pub const Context = struct {
     last_matched_container: *node.Node,
 
     refs: std.StringHashMapUnmanaged(RefDef) = .empty,
+
+    /// Absolute offsets of the line currently being incorporated.
+    line_norm_start: u32 = 0,
+    line_raw_start: u32 = 0,
+    line_end_norm: u32 = 0, // excludes the trailing newline
+    line_trimmed_end_norm: u32 = 0, // excludes trailing spaces/tabs and newline
+    line_no: u32 = 0,
+
+    pub fn abs(self: *Context, rel: usize) u32 {
+        return self.line_norm_start + @as(u32, @intCast(rel));
+    }
+
+    pub fn currentAbs(self: *Context) u32 {
+        return self.abs(self.offset);
+    }
 
     pub fn advanceOffset(self: *Context, count: usize, columns: bool) void {
         var remaining = count;
@@ -127,6 +143,7 @@ pub const Context = struct {
     pub fn addChild(self: *Context, t: types.NodeType) !*node.Node {
         while (!self.tip.canContain(t)) self.finalize(self.tip);
         const n = try node.Node.create(self.tree.allocator, t);
+        n.setSpan(self.currentAbs(), self.line_trimmed_end_norm);
         self.tip.appendChild(n);
         self.tip = n;
         return n;
@@ -136,6 +153,7 @@ pub const Context = struct {
         const n = try node.Node.create(self.tree.allocator, t);
         n.tokens = tokens;
         n.close = true;
+        n.setSpan(self.currentAbs(), self.line_trimmed_end_norm);
         self.tip.appendChild(n);
         return n;
     }
@@ -147,19 +165,34 @@ pub const Tree = struct {
     context: *Context,
     lexer: lex.Lexer = undefined,
     name: []const u8 = "",
+    input: []u8 = &.{},
+    source_map: source.SourceMap = .{ .segs = &.{}, .raw_len = 0, .norm_len = 0 },
 
     /// Initializes in place so `Context.tree` holds a stable pointer.
-    pub fn init(self: *Tree, allocator: std.mem.Allocator, input: []u8, options: Options) !void {
+    pub fn init(self: *Tree, allocator: std.mem.Allocator, input: []u8, options: Options, map: source.SourceMap) !void {
         const root = try node.Node.create(allocator, .document);
         const ctx = try allocator.create(Context);
-        self.* = .{ .allocator = allocator, .root = root, .context = ctx };
+        self.* = .{ .allocator = allocator, .root = root, .context = ctx, .input = input, .source_map = map };
         ctx.* = .{ .tree = self, .options = options, .tip = root, .oldtip = root, .last_matched_container = root };
         self.lexer = lex.Lexer.init(input);
     }
 
     pub fn parseBlocks(self: *Tree) !void {
-        self.context.tip = self.root;
+        const ctx = self.context;
+        ctx.tip = self.root;
+        self.root.setSpan(0, @intCast(self.input.len));
+        var line_no: u32 = 0;
         while (try self.lexer.nextLine(self.allocator)) |line| {
+            const norm_start: u32 = @intCast(@intFromPtr(line.ptr) - @intFromPtr(self.input.ptr));
+            ctx.line_norm_start = norm_start;
+            ctx.line_raw_start = self.source_map.normToRawStart(norm_start);
+            const has_newline = line.len > 0 and line[line.len - 1] == '\n';
+            ctx.line_end_norm = norm_start + @as(u32, @intCast(line.len - @intFromBool(has_newline)));
+            const line_body = line[0 .. line.len - @intFromBool(has_newline)];
+            const trimmed = token.trimRight(line_body).remains;
+            ctx.line_trimmed_end_norm = norm_start + @as(u32, @intCast(trimmed.len));
+            ctx.line_no = line_no;
+            line_no += 1;
             try self.incorporateLine(line);
         }
         while (true) {
@@ -261,9 +294,31 @@ pub const Tree = struct {
                     }
                 }
             } else if (ctx.offset < ctx.current_line_len and !ctx.blank) {
-                _ = try ctx.addChild(.paragraph);
+                const p = try ctx.addChild(.paragraph);
                 ctx.advanceNextNonspace();
+                p.setSpan(ctx.currentAbs(), ctx.line_trimmed_end_norm);
                 try self.addLine();
+            }
+        }
+
+        if (!ctx.blank) {
+            var c: ?*node.Node = container;
+            while (c) |n| : (c = n.parent) {
+                switch (n.typ) {
+                    .blockquote, .list, .list_item => n.src_end = ctx.line_end_norm,
+                    else => {},
+                }
+            }
+            // Lazy continuation lines extend a paragraph (and its ancestors) beyond the
+            // container marker; keep ancestor spans enclosing the child.
+            c = ctx.tip;
+            while (c) |n| : (c = n.parent) {
+                switch (n.typ) {
+                    .blockquote, .list, .list_item => {
+                        if (ctx.line_end_norm > n.src_end) n.src_end = ctx.line_end_norm;
+                    },
+                    else => {},
+                }
             }
         }
     }
@@ -271,18 +326,59 @@ pub const Tree = struct {
     pub fn addLine(self: *Tree) !void {
         const ctx = self.context;
         if (ctx.partially_consumed_tab) {
-            ctx.offset += 1;
+            const tab_src = ctx.currentAbs();
+            ctx.offset += 1; // skip over tab
             const chars_to_tab = 4 - (ctx.column % 4);
             var i: usize = 0;
-            while (i < chars_to_tab) : (i += 1) try appendTokens(self.allocator, ctx.tip, " ");
+            while (i < chars_to_tab) : (i += 1) try appendTokensAt(self.allocator, ctx.tip, " ", tab_src, 1);
         }
-        try appendTokens(self.allocator, ctx.tip, ctx.current_line[ctx.offset..]);
+        const src_start = ctx.currentAbs();
+        const remainder = ctx.current_line[ctx.offset..];
+        try appendTokensAt(self.allocator, ctx.tip, remainder, src_start, @intCast(remainder.len));
+
+        const blank = token.isBlankLine(remainder);
+        if (!blank) {
+            const end = switch (ctx.tip.typ) {
+                .code_block, .html_block => ctx.line_end_norm,
+                else => ctx.line_trimmed_end_norm,
+            };
+            if (end > ctx.tip.src_start) ctx.tip.src_end = end;
+            if (ctx.tip.typ == .code_block) {
+                if (ctx.tip.code_content_start == source.no_pos) ctx.tip.code_content_start = src_start;
+                ctx.tip.code_content_end = end;
+            }
+        }
     }
 };
 
-pub fn appendTokens(allocator: std.mem.Allocator, n: *node.Node, bytes: []const u8) !void {
+pub fn appendTokensAt(allocator: std.mem.Allocator, n: *node.Node, bytes: []const u8, src_off: u32, src_len: u32) !void {
+    if (bytes.len == 0) return;
+    const tok_off: u32 = @intCast(n.tokens.len);
     var out: std.ArrayListUnmanaged(u8) = .empty;
     try out.appendSlice(allocator, n.tokens);
     try out.appendSlice(allocator, bytes);
     n.tokens = try out.toOwnedSlice(allocator);
+
+    var map: std.ArrayListUnmanaged(node.TokenSeg) = .empty;
+    try map.appendSlice(allocator, n.token_map);
+    if (map.items.len > 0) {
+        const last = &map.items[map.items.len - 1];
+        if (last.tok_off + last.tok_len == tok_off and last.src_off + last.src_len == src_off) {
+            last.tok_len += @intCast(bytes.len);
+            last.src_len += src_len;
+            n.token_map = try map.toOwnedSlice(allocator);
+            return;
+        }
+    }
+    try map.append(allocator, .{
+        .tok_off = tok_off,
+        .tok_len = @intCast(bytes.len),
+        .src_off = src_off,
+        .src_len = src_len,
+    });
+    n.token_map = try map.toOwnedSlice(allocator);
+}
+
+pub fn appendTokens(allocator: std.mem.Allocator, n: *node.Node, bytes: []const u8) !void {
+    try appendTokensAt(allocator, n, bytes, 0, @intCast(bytes.len));
 }

@@ -64,6 +64,7 @@ function nodeRow(node) {
   const row = document.createElement("div");
   row.className = "node-row";
   row.dataset.index = String(node.index);
+  row.style.setProperty("--depth", String(node.depth));
   row.tabIndex = 0;
   row.setAttribute("role", "treeitem");
   row.setAttribute("aria-level", String(node.depth + 1));
@@ -113,6 +114,7 @@ function renderInspector() {
     ["index", node.index],
     ["depth", node.depth],
     ["children", node.children.length],
+    ["span", `${node.raw[0]}..${node.raw[1]}${node.derived ? " (derived)" : ""}`],
     ["tokens", node.tokens || "—"],
     ...Object.entries(node.fields).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : String(v)]),
   ];
@@ -165,8 +167,8 @@ function parseNow() {
     doc.free();
     const ms = performance.now() - t0;
     statMs.textContent = ms < 0.1 ? `${Math.max(1, Math.round(ms * 1000))} µs` : `${ms.toFixed(2)} ms`;
-    if (!state.expanded.size || state.selected == null) state.expanded = defaultExpanded(decoded);
-    if (state.selected != null && state.selected >= decoded.count) state.selected = null;
+    if (!state.expanded.size) state.expanded = defaultExpanded(decoded);
+    if (state.selected == null || state.selected >= decoded.count) state.selected = 0;
     renderTree();
     renderInspector();
     jsonEl.textContent = state.json;

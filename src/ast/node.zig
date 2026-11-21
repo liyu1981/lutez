@@ -5,7 +5,62 @@
 
 const std = @import("std");
 const types = @import("../types.zig");
+pub const source = @import("../source.zig");
 const NodeType = types.NodeType;
+
+/// Provenance for one appended token chunk: token-buffer offset -> normalized source offset.
+/// `src_len` may differ from `tok_len` for tab-expanded synthetic spaces.
+pub const TokenSeg = struct {
+    tok_off: u32,
+    tok_len: u32,
+    src_off: u32,
+    src_len: u32,
+};
+
+pub const Span = struct { start: u32, end: u32 };
+
+/// Maps a token slice back to normalized source offsets using provenance segments.
+/// Returns null when the slice is not contained in `buffer` (i.e. it is a synthesized
+/// copy such as an entity decode or an encoded link destination).
+pub fn mapTokenSlice(buffer: []const u8, map: []const TokenSeg, slice: []const u8) ?Span {
+    if (slice.len == 0 or map.len == 0) return null;
+    const base = @intFromPtr(buffer.ptr);
+    const ptr = @intFromPtr(slice.ptr);
+    if (ptr < base) return null;
+    const off: u32 = @intCast(ptr - base);
+    if (off + slice.len > buffer.len) return null;
+    return mapTokenRange(buffer, map, off, off + @as(u32, @intCast(slice.len)));
+}
+
+pub fn mapTokenRange(buffer: []const u8, map: []const TokenSeg, start_off: u32, end_off: u32) ?Span {
+    if (start_off > end_off or end_off > buffer.len) return null;
+    if (map.len == 0) return .{ .start = start_off, .end = end_off };
+    return .{
+        .start = mapTokenOffset(map, start_off, false),
+        .end = mapTokenOffset(map, end_off, true),
+    };
+}
+
+/// Fills every descendant without a span from `span` (used for synthesized subtrees).
+pub fn fillSubtreeSpan(n: *Node, span: Span) void {
+    if (!n.hasSpan()) n.setSpan(span.start, span.end);
+    var c = n.first_child;
+    while (c) |ch| : (c = ch.next) fillSubtreeSpan(ch, span);
+}
+
+fn mapTokenOffset(map: []const TokenSeg, off: u32, end_bias: bool) u32 {
+    for (map) |s| {
+        const s_end = s.tok_off + s.tok_len;
+        if (off < s.tok_off) return s.src_off;
+        if (off < s_end) {
+            if (s.tok_len == s.src_len) return s.src_off + (off - s.tok_off);
+            return if (end_bias) s.src_off + s.src_len else s.src_off;
+        }
+        if (off == s_end) return s.src_off + s.src_len;
+    }
+    const last = map[map.len - 1];
+    return last.src_off + last.src_len;
+}
 
 pub const ListData = struct {
     typ: u8 = 0, // 0 unordered, 1 ordered, 3 task
@@ -28,6 +83,24 @@ pub const Node = struct {
     first_child: ?*Node = null,
     last_child: ?*Node = null,
     tokens: []u8 = &.{},
+
+    /// Source span in normalized input bytes (see src/source.zig). `no_pos` = unset.
+    src_start: u32 = source.no_pos,
+    src_end: u32 = source.no_pos,
+    src_derived: bool = false,
+
+    /// In-memory only: token provenance for inline position mapping.
+    token_map: []TokenSeg = &.{},
+    /// Buffer that `token_map` offsets refer to (usually `tokens`, or a table paragraph).
+    token_buffer: []u8 = &.{},
+
+    /// In-memory only: code block positions for child marker/content spans.
+    code_info_start: u32 = source.no_pos,
+    code_info_end: u32 = source.no_pos,
+    code_content_start: u32 = source.no_pos,
+    code_content_end: u32 = source.no_pos,
+    code_close_start: u32 = source.no_pos,
+    code_close_end: u32 = source.no_pos,
 
     close: bool = false,
     last_line_blank: bool = false,
@@ -56,6 +129,22 @@ pub const Node = struct {
 
     link_type: u8 = 0,
     link_ref_label: []u8 = &.{},
+
+    pub fn setSpan(self: *Node, start: u32, end: u32) void {
+        self.src_start = start;
+        self.src_end = end;
+        self.src_derived = false;
+    }
+
+    pub fn setDerivedSpan(self: *Node, at: u32) void {
+        self.src_start = at;
+        self.src_end = at;
+        self.src_derived = true;
+    }
+
+    pub fn hasSpan(self: *const Node) bool {
+        return self.src_start != source.no_pos and self.src_end != source.no_pos;
+    }
 
     pub fn create(allocator: std.mem.Allocator, typ: NodeType) !*Node {
         const n = try allocator.create(Node);

@@ -6,14 +6,14 @@
 const std = @import("std");
 
 /// Semantic version of the lutez library (not the ported upstream revision).
-pub const version = std.SemanticVersion{ .major = 0, .minor = 1, .patch = 0 };
-pub const version_string = "0.1.0";
+pub const version = std.SemanticVersion{ .major = 0, .minor = 2, .patch = 0 };
+pub const version_string = "0.2.0";
 
 /// C ABI version. Bumped for any binary-incompatible change to include/lutez.h.
-pub const abi_version: u32 = 1;
+pub const abi_version: u32 = 2;
 
 /// Wire-format version of the serialized AST. See doc/WIRE_FORMAT.md.
-pub const wire_format_version: u32 = 1;
+pub const wire_format_version: u32 = 2;
 
 /// Upstream lute revision this port tracks. Must equal the `upstream/lute` submodule
 /// gitlink; `tools/upstream.sh --verify` enforces this in CI.

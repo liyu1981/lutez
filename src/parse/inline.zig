@@ -11,6 +11,7 @@ const tree = @import("tree.zig");
 const delim = @import("delimiter.zig");
 const links = @import("links.zig");
 const blocks = @import("blocks.zig");
+const source = @import("../source.zig");
 
 pub const InlineContext = delim.InlineContext;
 
@@ -37,13 +38,21 @@ fn walkParseInline(t: *tree.Tree, n: *node.Node) !void {
             return;
         }
         if (n.tokens.len == 0) return;
-        var ictx = InlineContext{ .tokens = n.tokens, .tokens_len = n.tokens.len };
+        const map_buffer = if (n.token_buffer.len > 0) n.token_buffer else n.tokens;
+        var ictx = InlineContext{
+            .tokens = n.tokens,
+            .tokens_len = n.tokens.len,
+            .token_buffer = map_buffer,
+            .token_map = n.token_map,
+        };
         try parseInline(t, n, &ictx);
         try delim.processEmphasis(.{ .allocator = t.allocator, .options = t.context.options, .ictx = &ictx }, null);
+        assignInlineSpans(&ictx, n);
         try mergeText(t.allocator, n);
         if (t.context.options.gfm_auto_link) {
             try @import("auto_link.zig").parseGFMAutoEmailLink(t, n);
             try @import("auto_link.zig").parseGFMAutoLink(t, n);
+            assignInlineSpans(&ictx, n);
         }
         return;
     } else if (typ == .code_block) {
@@ -51,21 +60,29 @@ fn walkParseInline(t: *tree.Tree, n: *node.Node) !void {
             const open = try node.Node.create(t.allocator, .code_block_fence_open_marker);
             open.tokens = n.code_block_open_fence;
             open.code_block_fence_len = n.code_block_fence_len;
+            open.setSpan(n.src_start, n.src_start + n.code_block_fence_len);
             n.prependChild(open);
             const info = try node.Node.create(t.allocator, .code_block_fence_info_marker);
             info.code_block_info = n.code_block_info;
+            if (n.code_info_start != source.no_pos and n.code_info_end != source.no_pos and n.code_info_end > n.code_info_start) info.setSpan(n.code_info_start, n.code_info_end) else info.setDerivedSpan(n.src_start + n.code_block_fence_len);
             n.appendChild(info);
             const code = try node.Node.create(t.allocator, .code_block_code);
             code.tokens = n.tokens;
+            if (n.code_content_start != source.no_pos and n.code_content_end != source.no_pos and n.code_content_end > n.code_content_start) code.setSpan(n.code_content_start, n.code_content_end) else {
+                const cp = if (n.code_content_start != source.no_pos and n.code_content_start <= n.src_end) n.code_content_start else n.src_end;
+                code.setDerivedSpan(cp);
+            }
             n.appendChild(code);
             if (n.code_block_close_fence.len == 0) n.code_block_close_fence = n.code_block_open_fence;
             const close = try node.Node.create(t.allocator, .code_block_fence_close_marker);
             close.tokens = n.code_block_close_fence;
             close.code_block_fence_len = n.code_block_fence_len;
+            if (n.code_close_start != source.no_pos and n.code_close_end != source.no_pos and n.code_close_end > n.code_close_start) close.setSpan(n.code_close_start, n.code_close_end) else close.setDerivedSpan(n.src_end);
             n.appendChild(close);
         } else {
             const code = try node.Node.create(t.allocator, .code_block_code);
             code.tokens = n.tokens;
+            code.setSpan(n.src_start, n.src_end);
             n.appendChild(code);
         }
         n.tokens = &.{};
@@ -74,9 +91,52 @@ fn walkParseInline(t: *tree.Tree, n: *node.Node) !void {
     while (child) |c| : (child = c.next) try walkParseInline(t, c);
 }
 
+fn assignInlineSpans(ctx: *InlineContext, n: *node.Node) void {
+    var child = n.first_child;
+    while (child) |ch| : (child = ch.next) assignInlineSpans(ctx, ch);
+
+    if (!n.hasSpan() and n.tokens.len > 0) {
+        if (node.mapTokenSlice(ctx.token_buffer, ctx.token_map, n.tokens)) |sp| n.setSpan(sp.start, sp.end);
+    }
+
+    // Fill leaves that were synthesized (entity decode, encoded destination, ...) from
+    // their siblings, then union children into a container span.
+    child = n.first_child;
+    while (child) |ch| : (child = ch.next) {
+        if (ch.hasSpan()) continue;
+        const prev_end: ?u32 = if (ch.prev) |p| if (p.hasSpan()) p.src_end else null else null;
+        const next_start: ?u32 = if (ch.next) |p| if (p.hasSpan()) p.src_start else null else null;
+        if (prev_end != null and next_start != null and next_start.? >= prev_end.?) {
+            ch.setSpan(prev_end.?, next_start.?);
+        } else if (prev_end) |pe| {
+            ch.setDerivedSpan(pe);
+        } else if (next_start) |ns| {
+            ch.setDerivedSpan(ns);
+        } else if (n.hasSpan()) {
+            ch.setSpan(n.src_start, n.src_end);
+        }
+    }
+
+    if (!n.hasSpan()) {
+        var start: u32 = node.source.no_pos;
+        var end: u32 = 0;
+        var found = false;
+        child = n.first_child;
+        while (child) |ch| : (child = ch.next) {
+            if (!ch.hasSpan()) continue;
+            if (!found or ch.src_start < start) start = ch.src_start;
+            if (ch.src_end > end) end = ch.src_end;
+            found = true;
+        }
+        if (found) n.setSpan(start, end);
+    }
+    if (n.hasSpan()) node.fillSubtreeSpan(n, .{ .start = n.src_start, .end = n.src_end });
+}
+
 pub fn parseInline(t: *tree.Tree, block: *node.Node, ctx: *InlineContext) !void {
     const c = Ctx{ .t = t, .ctx = ctx };
     while (ctx.pos < ctx.tokens_len) {
+        const start_pos = ctx.pos;
         const tok = ctx.tokens[ctx.pos];
         var n: ?*node.Node = null;
         switch (tok) {
@@ -91,7 +151,9 @@ pub fn parseInline(t: *tree.Tree, block: *node.Node, ctx: *InlineContext) !void 
             lex.bang => n = try parseBang(c, block),
             else => n = try parseText(c),
         }
+        const end_pos = ctx.pos;
         if (n) |nn| {
+            if (!nn.hasSpan()) ctx.setSpanFor(nn, start_pos, end_pos);
             if (nn.prev == null and nn.next == null) {
                 block.appendChild(nn);
                 continue;
@@ -122,10 +184,12 @@ fn parseText(c: Ctx) !*node.Node {
 
 fn parseBackslash(c: Ctx, block: *node.Node) !?*node.Node {
     const ctx = c.ctx;
+    const start = ctx.pos;
     if (ctx.pos == ctx.tokens_len - 1) {
         ctx.pos += 1;
         const n = try node.Node.create(c.a(), .text);
         n.tokens = ctx.tokens[ctx.pos - 1 .. ctx.pos];
+        ctx.setSpanFor(n, start, ctx.pos);
         return n;
     }
     ctx.pos += 1;
@@ -134,19 +198,23 @@ fn parseBackslash(c: Ctx, block: *node.Node) !?*node.Node {
         ctx.pos += 1;
         const n = try node.Node.create(c.a(), .hard_break);
         n.tokens = ctx.tokens[ctx.pos - 1 .. ctx.pos];
+        ctx.setSpanFor(n, start, ctx.pos);
         return n;
     }
     if (lex.isASCIIPunct(tok)) {
         ctx.pos += 1;
         const n = try node.Node.create(c.a(), .backslash);
+        ctx.setSpanFor(n, start, ctx.pos);
         block.appendChild(n);
         const content = try node.Node.create(c.a(), .backslash_content);
         content.tokens = ctx.tokens[ctx.pos - 1 .. ctx.pos];
+        ctx.setSpanFor(content, ctx.pos - 1, ctx.pos);
         n.appendChild(content);
         return null;
     }
     const n = try node.Node.create(c.a(), .text);
     n.tokens = ctx.tokens[ctx.pos - 1 .. ctx.pos];
+    ctx.setSpanFor(n, start, ctx.pos);
     return n;
 }
 
@@ -302,6 +370,11 @@ fn parseCloseBracket(c: Ctx, block: *node.Node) !?*node.Node {
     var matched = false;
     var link_type: u8 = 0;
     var reflabel: []u8 = &.{};
+    var open_paren_span: ?node.Span = null;
+    var dest_span: ?node.Span = null;
+    var space_span: ?node.Span = null;
+    var title_span: ?node.Span = null;
+    var close_paren_span: ?node.Span = null;
 
     if (ctx.pos + 1 < ctx.tokens_len and ctx.tokens[ctx.pos] == lex.open_paren) {
         var remains: []u8 = ctx.tokens[ctx.pos..];
@@ -309,11 +382,18 @@ fn parseCloseBracket(c: Ctx, block: *node.Node) !?*node.Node {
             const sp = spnl(remains);
             if (!sp.ok) break;
             remains = sp.remains;
+            const dest_base: usize = @intFromPtr(remains.ptr) - @intFromPtr(ctx.tokens.ptr);
+            if (open_paren_span == null) {
+                if (ctx.spanFor(dest_base, dest_base + 1)) |osp| open_paren_span = osp;
+            }
             const id = try links.parseInlineLinkDest(c.a(), c.t.context.options, remains);
             if (id.passed == null) break;
             const passed = id.passed.?;
             remains = id.remains;
             dest = id.destination;
+            if (id.src_end > id.src_start) {
+                if (ctx.spanFor(dest_base + id.src_start, dest_base + id.src_end)) |dsp| dest_span = dsp;
+            }
             if (passed.len == 0) break;
             open_paren = passed[0..1];
             close_paren = passed[passed.len - 1 ..];
@@ -321,24 +401,48 @@ fn parseCloseBracket(c: Ctx, block: *node.Node) !?*node.Node {
             if (matched and remains.len > 1) {
                 matched = !lex.isWhitespace(remains[0]) and remains[1] != lex.doublequote;
             }
-            if (matched) break;
+            if (matched) {
+                const close_off = @intFromPtr(remains.ptr) - @intFromPtr(ctx.tokens.ptr);
+                if (remains.len > 0 and remains[0] == lex.close_paren) {
+                    if (ctx.spanFor(close_off, close_off + 1)) |csp| close_paren_span = csp;
+                } else if (close_off > 0) {
+                    if (ctx.spanFor(close_off - 1, close_off)) |csp| close_paren_span = csp;
+                }
+                break;
+            }
             if (remains.len < 1 or !lex.isWhitespace(remains[0])) break;
             const sp2 = spnl(remains);
             if (!sp2.ok) break;
             space = sp2.passed;
+            const space_off = @intFromPtr(sp2.passed.ptr) - @intFromPtr(ctx.tokens.ptr);
+            if (sp2.passed.len > 0) {
+                if (ctx.spanFor(space_off, space_off + sp2.passed.len)) |ssp| space_span = ssp;
+            }
             remains = sp2.remains;
             if (remains.len == 0) break;
             matched = remains[0] == lex.close_paren;
             close_paren = remains[0..1];
-            if (matched) break;
+            if (matched) {
+                const close_off = @intFromPtr(remains.ptr) - @intFromPtr(ctx.tokens.ptr);
+                if (ctx.spanFor(close_off, close_off + 1)) |csp| close_paren_span = csp;
+                break;
+            }
+            const title_base: usize = @intFromPtr(remains.ptr) - @intFromPtr(ctx.tokens.ptr);
             const tt = try links.parseLinkTitle(c.a(), remains);
             if (!tt.valid) break;
             title = tt.title;
             remains = tt.remains;
+            if (tt.src_end > tt.src_start) {
+                if (ctx.spanFor(title_base + tt.src_start, title_base + tt.src_end)) |tsp| title_span = tsp;
+            }
             const sp3 = spnl(remains);
             remains = sp3.remains;
             matched = sp3.ok and remains.len > 0;
-            if (remains.len > 0) close_paren = remains;
+            if (remains.len > 0) {
+                close_paren = remains;
+                const close_off = @intFromPtr(remains.ptr) - @intFromPtr(ctx.tokens.ptr);
+                if (ctx.spanFor(close_off, close_off + 1)) |csp| close_paren_span = csp;
+            }
             if (matched) matched = remains[0] == lex.close_paren;
             break :outer;
         }
@@ -381,6 +485,10 @@ fn parseCloseBracket(c: Ctx, block: *node.Node) !?*node.Node {
     }
     if (matched) {
         const link = try node.Node.create(c.a(), if (is_image) .image else .link);
+        const bracket_pos = if (is_image and opener.index > 0) opener.index - 1 else opener.index;
+        const range = ctx.spanFor(start_pos, ctx.pos);
+        const link_end = if (link_type == 3) ctx.sourcePos(start_pos) else if (range) |r| r.end else ctx.sourcePos(ctx.pos);
+        link.setSpan(ctx.sourcePos(bracket_pos), link_end);
         link.link_type = link_type;
         link.link_ref_label = reflabel;
         if (is_image) {
@@ -405,23 +513,37 @@ fn parseCloseBracket(c: Ctx, block: *node.Node) !?*node.Node {
         link.appendChild(cb);
         const op = try node.Node.create(c.a(), .open_paren);
         op.tokens = open_paren;
+        if (open_paren_span) |sp| op.setSpan(sp.start, sp.end) else op.setDerivedSpan(link.src_start);
         link.appendChild(op);
         const ld = try node.Node.create(c.a(), .link_dest);
         ld.tokens = dest;
+        if (dest_span) |sp| ld.setSpan(sp.start, sp.end);
         link.appendChild(ld);
         if (space.len != 0) {
             const sp = try node.Node.create(c.a(), .link_space);
             sp.tokens = space;
+            if (space_span) |ssp| sp.setSpan(ssp.start, ssp.end);
             link.appendChild(sp);
         }
         if (title.len != 0) {
             const lt = try node.Node.create(c.a(), .link_title);
             lt.tokens = title;
+            if (title_span) |tsp| lt.setSpan(tsp.start, tsp.end);
             link.appendChild(lt);
         }
         const cp = try node.Node.create(c.a(), .close_paren);
         cp.tokens = close_paren;
+        if (close_paren_span) |csp| cp.setSpan(csp.start, csp.end) else cp.setDerivedSpan(link.src_end);
         link.appendChild(cp);
+        if (link_type == 3) {
+            // Reference links synthesize the bracket/paren/destination children; keep
+            // them zero-width at the link end so sibling spans stay ordered.
+            op.setDerivedSpan(link.src_end);
+            ld.setDerivedSpan(link.src_end);
+            if (link.childByType(.link_title)) |lt| lt.setDerivedSpan(link.src_end);
+            if (link.childByType(.link_space)) |ls| ls.setDerivedSpan(link.src_end);
+            cp.setDerivedSpan(link.src_end);
+        }
         try delim.processEmphasis(c.dctx(), opener.previous_delimiter);
         removeBracket(ctx);
         opener.node.unlink();
@@ -516,44 +638,43 @@ fn matchCodeSpanEnd(tokens: []const u8, num: usize) isize {
 pub fn mergeText(allocator: std.mem.Allocator, n: *node.Node) !void {
     var child = n.first_child;
     while (child) |ch| {
-        if (ch.typ == .text) {
+        if (ch.typ == .text or ch.typ == .link_text) {
+            const typ = ch.typ;
             if (ch.next) |nx| {
-                if (nx.typ == .text) {
-                    var total = ch.tokens.len;
-                    var x: ?*node.Node = nx;
-                    while (x) |xx| {
-                        if (xx.typ != .text) break;
-                        total += xx.tokens.len;
-                        x = xx.next;
-                    }
+                if (nx.typ == typ) {
                     var merged: std.ArrayListUnmanaged(u8) = .empty;
-                    try merged.ensureTotalCapacity(allocator, total);
-                    try merged.appendSlice(allocator, ch.tokens);
-                    var cur: ?*node.Node = nx;
+                    var map: std.ArrayListUnmanaged(node.TokenSeg) = .empty;
+                    var span_start: u32 = node.source.no_pos;
+                    var span_end: u32 = 0;
+                    var has_span = false;
+
+                    var cur: ?*node.Node = ch;
+                    var tok_off: u32 = 0;
                     while (cur) |xx| {
-                        if (xx.typ != .text) break;
+                        if (xx.typ != typ) break;
                         try merged.appendSlice(allocator, xx.tokens);
+                        if (xx.hasSpan()) {
+                            if (!has_span or xx.src_start < span_start) span_start = xx.src_start;
+                            if (xx.src_end > span_end) span_end = xx.src_end;
+                            has_span = true;
+                            try map.append(allocator, .{
+                                .tok_off = tok_off,
+                                .tok_len = @intCast(xx.tokens.len),
+                                .src_off = xx.src_start,
+                                .src_len = xx.src_end - xx.src_start,
+                            });
+                        }
+                        tok_off += @intCast(xx.tokens.len);
                         const nxt = xx.next;
-                        xx.unlink();
+                        if (xx != ch) xx.unlink();
                         cur = nxt;
                     }
                     ch.tokens = try merged.toOwnedSlice(allocator);
-                }
-            }
-        } else if (ch.typ == .link_text) {
-            if (ch.next) |nx| {
-                if (nx.typ == .link_text) {
-                    var merged: std.ArrayListUnmanaged(u8) = .empty;
-                    try merged.appendSlice(allocator, ch.tokens);
-                    var cur: ?*node.Node = nx;
-                    while (cur) |xx| {
-                        if (xx.typ != .link_text) break;
-                        try merged.appendSlice(allocator, xx.tokens);
-                        const nxt = xx.next;
-                        xx.unlink();
-                        cur = nxt;
+                    if (has_span) {
+                        ch.setSpan(span_start, span_end);
+                        ch.token_buffer = ch.tokens;
+                        ch.token_map = try map.toOwnedSlice(allocator);
                     }
-                    ch.tokens = try merged.toOwnedSlice(allocator);
                 }
             }
         } else {

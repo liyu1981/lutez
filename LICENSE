@@ -1,3 +1,10 @@
+lutez
+Copyright (c) 2026 Yu Li and lutez contributors
+Portions copyright (c) 2019-present b3log.org (upstream Lute, Mulan PSL v2)
+
+lutez is licensed under the Mulan Permissive Software License, Version 2.
+The license text follows.
+
                      木兰宽松许可证, 第2版
 
    木兰宽松许可证， 第2版 
@@ -53,8 +60,8 @@
 
       3， 请将如下声明文本放入每个源文件的头部注释中。
 
-   Copyright (c) [Year] [name of copyright holder]
-   [Software Name] is licensed under Mulan PSL v2.
+   Copyright (c) 2026 Yu Li and lutez contributors
+   lutez is licensed under Mulan PSL v2.
    You can use this software according to the terms and conditions of the Mulan PSL v2. 
    You may obtain a copy of Mulan PSL v2 at:
             http://license.coscl.org.cn/MulanPSL2 
@@ -118,8 +125,8 @@
       iii Attach the statement to the appropriate annotated syntax at the beginning of each source file.
 
 
-   Copyright (c) [Year] [name of copyright holder]
-   [Software Name] is licensed under Mulan PSL v2.
+   Copyright (c) 2026 Yu Li and lutez contributors
+   lutez is licensed under Mulan PSL v2.
    You can use this software according to the terms and conditions of the Mulan PSL v2. 
    You may obtain a copy of Mulan PSL v2 at:
                http://license.coscl.org.cn/MulanPSL2 

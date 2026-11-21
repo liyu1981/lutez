@@ -1,7 +1,7 @@
-# lutez wire format v1 (draft)
+# lutez wire format v2
 
-**Status: DRAFT v0** — normative after M0.4. Governs `lutez_doc_ast()` bytes, the WASM
-memory view, and the committed conformance corpus (`*.lzc`).
+**Status: v2 (lutez 0.2.0).** Governs `lutez_doc_ast()` bytes, the WASM memory view, and
+the committed conformance corpus (`*.lzc`). v1 readers reject v2; see §8 for versioning.
 
 Design constraints (from the feasibility report §5 and §6):
 
@@ -18,13 +18,15 @@ Design constraints (from the feasibility report §5 and §6):
 
 ```
 offset 0                Header (40 bytes)
-offset 32               Nodes      node_count × node_stride
+offset 40               Nodes      node_count × node_stride
                        padding to 8-byte alignment
                        Extras     ext_len bytes
                        padding to 8-byte alignment
                        Input      input_len bytes
                        padding to 8-byte alignment
                        Pool       pool_len bytes
+                       padding to 8-byte alignment
+                       SourceMap  map_len bytes
 ```
 
 All offsets in the header are derived, not stored: a reader computes
@@ -37,19 +39,21 @@ version needs sections in a different order, `format_version` changes.
 | Off | Size | Field | Value / meaning |
 |---:|---:|---|---|
 | 0 | 8 | `magic` | ASCII `LUTEAST1` (no NUL) |
-| 8 | 4 | `format_version` | `1` |
+| 8 | 4 | `format_version` | `2` |
 | 12 | 4 | `flags` | bit 0 must be 1 = little-endian; bits 1–31 reserved, zero |
 | 16 | 4 | `node_count` | number of nodes, including the document root (≥ 1) |
-| 20 | 4 | `node_stride` | `48` for v1; readers must honor the value and require ≥ 48 |
+| 20 | 4 | `node_stride` | `56` for v2; readers must require ≥ 56 |
 | 24 | 4 | `input_len` | normalized input bytes |
 | 28 | 4 | `pool_len` | token pool bytes |
 | 32 | 4 | `ext_len` | extras section bytes |
-| 36 | 4 | `reserved` | must be 0 |
+| 36 | 4 | `map_len` | source-map section bytes |
 
-Readers must reject `node_stride < 48`, `node_count == 0`, unknown `format_version`, or
+Readers must reject `node_stride < 56`, `node_count == 0`, unknown `format_version`, or
 any section that would exceed the buffer length.
 
-## 3. Node record (48 bytes, `node_stride` for v1)
+`map_off = align8(pool_off + pool_len)`; the source-map section is `4 + count × 20` bytes.
+
+## 3. Node record (56 bytes, `node_stride` for v2)
 
 | Off | Size | Field | Meaning |
 |---:|---:|---|---|
@@ -62,18 +66,25 @@ any section that would exceed the buffer length.
 | 20 | 4 | `next` | node index or `0xFFFFFFFF` |
 | 24 | 4 | `tok_ref` | offset into input (flags bit 0 = 0) or pool (bit 0 = 1); `0xFFFFFFFF` = empty |
 | 28 | 4 | `tok_len` | length; must be `0` when `tok_ref` is absent |
-| 32 | 4 | `data_ref` | same encoding, selector = flags bit 1; `0xFFFFFFFF` = empty |
-| 36 | 4 | `data_len` | length; `0` when absent |
-| 40 | 4 | `ext_ref` | offset into extras section; `0xFFFFFFFF` = no blob |
-| 44 | 4 | `ext_len` | blob length; `0` when absent |
+| 32 | 4 | `src_norm_start` | normalized-input byte offset, inclusive |
+| 36 | 4 | `src_norm_end` | normalized-input byte offset, exclusive |
+| 40 | 4 | `src_raw_start` | caller's original-bytes offset, inclusive |
+| 44 | 4 | `src_raw_end` | original-bytes offset, exclusive |
+| 48 | 4 | `ext_ref` | offset into extras section; `0xFFFFFFFF` = no blob |
+| 52 | 4 | `ext_len` | blob length; `0` when absent |
 
-In v1 **all** tokens live in the pool (`flags` bit 0 = 1); the input section is
-reserved for a future zero-copy mode and is currently empty. `data_ref` is always
-`0xFFFFFFFF` (the C accessor `lutez_node_data` returns the node's token bytes).
+In v2 **all** tokens still live in the pool (`flags` bit 0 = 1); the input section is
+reserved for a future zero-copy mode and is currently empty. `lutez_node_data` returns
+the node's token bytes.
+
+Spans are half-open and cover the source construct. Raw offsets are the primary consumer
+contract (editors, deep links, line numbers); normalized offsets match the token buffer
+and the source map. `flags` bit 8 marks **derived** nodes (zero-width span with no source
+bytes, e.g. a synthesized reference-link paren). Node `0` is the `NodeDocument` root and
+spans `[0, raw_len)`.
 
 Node `0` is always the `NodeDocument` root (`parent == prev == next == 0xFFFFFFFF`).
-Empty tokens and absent ext are both legal; an empty `Data` with `data_ref = 0` and
-`data_len = 0` means "empty", not "points at input[0]".
+Empty tokens and absent ext are both legal.
 
 `previous` is stored explicitly: upstream preserves it and several parse steps rely on
 sibling back-links (`InsertAfter`, delimiter retraction).
@@ -97,6 +108,27 @@ Decoders must reject blobs with trailing bytes (indicates schema/version mismatc
 `align8(extras_off + ext_len)` is the input section offset, so blobs need no internal
 alignment; consumers that want raw `u32` views must copy (documented in the header).
 
+## 4.1 Source-map section
+
+Built while normalizing the input (CRLF/CR→LF, NUL→U+FFFD, synthetic trailing LF):
+
+```
+u32 count
+count × {
+  u32 norm_start, u32 norm_len,
+  u32 raw_start,  u32 raw_len,
+  u8  kind, u8 reserved[3]      // kind: 0 identity, 1 CR/CRLF, 2 NUL, 3 synthetic LF
+}
+```
+
+Segments cover the normalized buffer in order. Consumers convert with:
+
+- start: identity → `raw_start + (off - norm_start)`; changed/synthetic → `raw_start`;
+- end: identity → `raw_start + (off - norm_start)`; changed/synthetic → `raw_start + raw_len`.
+
+For unchanged regions (kind 0) lengths are equal; for NUL one raw byte maps to the three
+bytes of U+FFFD. Synthetic trailing LF has `raw_len = 0`.
+
 ## 5. Input and pool sections
 
 - **Input**: the normalized document text exactly as the lexer saw it — CRLF already
@@ -105,7 +137,7 @@ alignment; consumers that want raw `u32` views must copy (documented in the head
   dangle after the caller frees its buffer.
 - **Pool**: every non-input byte sequence referenced by any node (synthesized markers,
   entity-decoded text, folded labels, destination-encoded bytes). Duplicates are allowed
-  in v1; a future version may dedupe (consumers must not assume uniqueness).
+  in v2; a future version may dedupe (consumers must not assume uniqueness).
 
 Pool bytes are opaque and have no alignment guarantees.
 
@@ -119,7 +151,8 @@ Pool bytes are opaque and have no alignment guarantees.
 5. `first_child.prev == null_node`, `last_child.next == null_node`.
 6. `first_child` and `last_child` are either both `null_node` or both present.
 7. Every child has `parent == self`.
-8. `tok_ref + tok_len` and `data_ref + data_len` stay inside their selected section.
+8. `tok_ref + tok_len` stays inside the pool section; `src_norm_*`/`src_raw_*` stay within
+   the normalized/raw bounds; `src_norm_start <= src_norm_end`.
 9. `ext_ref + ext_len` stays inside the extras section.
 10. Every `ext` blob is fully consumed by its type's decoder.
 
@@ -156,10 +189,10 @@ WASM (`wasm.zig`):
 
 ## 8. Versioning policy
 
-- `format_version` increments on any change that a v1 reader cannot ignore:
+- `format_version` increments on any change that a v2 reader cannot ignore:
   node stride change, new required flag semantics, section reordering.
-- Adding a new node type for a *currently out-of-scope feature* is a breaking change for
-  v1 consumers that whitelist types; it ships in v2 of the format and of the C ABI.
+- Adding a new core node type is a breaking change for consumers that whitelist types;
+  adopter constructs use `NodeExtension` (type 500) and its payload instead.
 - `ext` blob changes that only append fields are handled by bumping `format_version`
   (readers reject trailing bytes today). Removing/renaming fields is also a version bump.
 - The C ABI has its own `lutez_opts`/`lutez_doc` version (`LUTEZ_ABI_VERSION`), which
@@ -168,18 +201,16 @@ WASM (`wasm.zig`):
 
 ## 9. Corpus file format (`*.lzc`)
 
-Used by the Go-free conformance runner. Not part of the public ABI, but frozen with
-`format_version` 1 so committed fixtures stay valid:
+Used by the Go-free conformance runner. Not part of the public ABI; frozen so committed
+fixtures stay valid:
 
 ```
-u32 magic 0x4C5A4331 ("LZC1")
+u32 magic 0x4C5A4332 ("LZC2")
 u32 case_count
 repeat case_count:
-  u32 name_len,  name bytes (UTF-8)
-  u32 opts_len,  options blob (same field order as lutez_opts v1, LE)
-  u32 md_len,    markdown bytes
-  u32 ast_len,   expected wire AST bytes (§1–§6)
-  u32 html_len,  expected HTML bytes (oracle output, for L3 debug; may be 0)
+  u32 name_len, name bytes (UTF-8)
+  u32 md_len,   markdown bytes
+  u32 ast_len,  expected canonical AST dump (UTF-8 text, not the wire format)
 ```
 
 All lengths are little-endian. Sections are concatenated, no alignment padding.

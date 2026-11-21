@@ -11,7 +11,7 @@ import (
 
 const (
 	headerLen  = 40
-	nodeStride = 48
+	nodeStride = 56
 	absent     = 0xFFFFFFFF
 )
 
@@ -21,7 +21,7 @@ func Decode(buf []byte) (*ast.Node, error) {
 		return nil, errors.New("wire: bad magic")
 	}
 	version := binary.LittleEndian.Uint32(buf[8:12])
-	if version != 1 {
+	if version != 2 {
 		return nil, fmt.Errorf("wire: unsupported version %d", version)
 	}
 	count := binary.LittleEndian.Uint32(buf[16:20])
@@ -64,8 +64,8 @@ func Decode(buf []byte) (*ast.Node, error) {
 			}
 			n.Tokens = append([]byte(nil), buf[poolOff+int(tokRef):poolOff+int(tokRef)+int(tokLen)]...)
 		}
-		extRef := binary.LittleEndian.Uint32(rec[40:44])
-		extLen2 := binary.LittleEndian.Uint32(rec[44:48])
+		extRef := binary.LittleEndian.Uint32(rec[48:52])
+		extLen2 := binary.LittleEndian.Uint32(rec[52:56])
 		if extRef != absent {
 			if extRef+extLen2 > extLen {
 				return nil, errors.New("wire: ext out of range")

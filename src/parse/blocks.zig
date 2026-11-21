@@ -38,6 +38,7 @@ pub fn continueBlock(n: *node.Node, ctx: *Context) anyerror!u8 {
 // ---- paragraph ------------------------------------------------------------
 
 pub fn paragraphFinalize(ctx: *Context, p: *node.Node) bool {
+    if (p.token_buffer.len == 0) p.token_buffer = p.tokens;
     p.tokens = @constCast(lex.trimWhitespace(p.tokens));
 
     var has_ref_defs = false;
@@ -60,6 +61,7 @@ pub fn paragraphFinalize(ctx: *Context, p: *node.Node) bool {
                             const tm = node.Node.create(ctx.tree.allocator, .task_list_item_marker) catch return false;
                             tm.tokens = toks[0..3];
                             tm.task_marker = marker;
+                            if (node.mapTokenSlice(p.token_buffer, p.token_map, toks[0..3])) |sp| tm.setSpan(sp.start, sp.end) else tm.setDerivedSpan(p.src_start);
                             p.prependChild(tm);
                             p.tokens = toks[3..];
                         }
@@ -83,20 +85,30 @@ fn atxHeadingStart(t: *Tree, container: *node.Node) anyerror!u8 {
     const parsed = try parseATXHeading(t);
     if (!parsed.ok) return 0;
     const ctx = t.context;
+    const start = ctx.abs(ctx.next_nonspace);
     ctx.advanceNextNonspace();
     ctx.advanceOffset(parsed.content.len, false);
     ctx.closeUnmatchedBlocks();
     const heading = try ctx.addChild(.heading);
     heading.heading_level = parsed.level;
     heading.tokens = parsed.content;
+    heading.setSpan(start, ctx.line_trimmed_end_norm);
+    heading.token_buffer = heading.tokens;
+    heading.token_map = try t.allocator.dupe(node.TokenSeg, &.{.{
+        .tok_off = 0,
+        .tok_len = @intCast(heading.tokens.len),
+        .src_off = parsed.content_src_start,
+        .src_len = @intCast(heading.tokens.len),
+    }});
     const marker = try node.Node.create(t.allocator, .heading_c8h_marker);
     marker.tokens = parsed.markers;
+    marker.setSpan(start, start + parsed.level);
     heading.appendChild(marker);
     ctx.advanceOffset(ctx.current_line_len - ctx.offset, false);
     return 2;
 }
 
-const Atx = struct { ok: bool = false, markers: []u8 = &.{}, content: []u8 = &.{}, level: u8 = 0 };
+const Atx = struct { ok: bool = false, markers: []u8 = &.{}, content: []u8 = &.{}, level: u8 = 0, content_src_start: u32 = 0 };
 
 fn parseATXHeading(t: *Tree) !Atx {
     const ctx = t.context;
@@ -108,6 +120,7 @@ fn parseATXHeading(t: *Tree) !Atx {
     const markers = ctx.current_line[ctx.next_nonspace .. ctx.next_nonspace + level + 1];
     _ = lex.trimLeft(tokens); // strip leading whitespace (none in practice)
     tokens = @constCast(lex.trimLeft(tokens[level..]).remains);
+    const content_src_start = ctx.abs(@intFromPtr(tokens.ptr) - @intFromPtr(ctx.current_line.ptr));
     var content: std.ArrayListUnmanaged(u8) = .empty;
     for (tokens) |b| {
         if (b == lex.newline) break;
@@ -128,7 +141,7 @@ fn parseATXHeading(t: *Tree) !Atx {
         c = lex.trimRight(c[0..@intCast(idx)]).remains;
     }
     c = lex.trimRight(c).remains;
-    return .{ .ok = true, .markers = markers, .content = try t.allocator.dupe(u8, c), .level = @intCast(level) };
+    return .{ .ok = true, .markers = markers, .content = try t.allocator.dupe(u8, c), .level = @intCast(level), .content_src_start = content_src_start };
 }
 
 fn setextHeadingStart(t: *Tree, container: *node.Node) anyerror!u8 {
@@ -150,6 +163,9 @@ fn setextHeadingStart(t: *Tree, container: *node.Node) anyerror!u8 {
         heading.heading_level = level;
         heading.heading_setext = true;
         heading.tokens = @constCast(lex.trimWhitespace(container.tokens));
+        heading.token_buffer = if (container.token_buffer.len > 0) container.token_buffer else container.tokens;
+        heading.token_map = container.token_map;
+        heading.setSpan(container.src_start, ctx.line_trimmed_end_norm);
         container.insertAfter(heading);
         container.unlink();
         ctx.tip = heading;
@@ -177,8 +193,10 @@ fn thematicBreakStart(t: *Tree, container: *node.Node) anyerror!u8 {
     if (t.context.indented) return 0;
     if (!parseThematicBreak(t)) return 0;
     const ctx = t.context;
+    const start = ctx.abs(ctx.next_nonspace);
     ctx.closeUnmatchedBlocks();
-    _ = try ctx.addChild(.thematic_break);
+    const br = try ctx.addChild(.thematic_break);
+    br.setSpan(start, ctx.line_trimmed_end_norm);
     ctx.advanceOffset(ctx.current_line_len - ctx.offset, false);
     return 2;
 }
@@ -208,6 +226,7 @@ fn blockquoteStart(t: *Tree, container: *node.Node) anyerror!u8 {
     if (lex.peek(ctx.current_line, ctx.next_nonspace) != lex.greater) return 0;
     var markers: std.ArrayListUnmanaged(u8) = .empty;
     try markers.append(t.allocator, lex.greater);
+    const start = ctx.abs(ctx.next_nonspace);
     ctx.advanceNextNonspace();
     ctx.advanceOffset(1, false);
     const ws = lex.peek(ctx.current_line, ctx.offset);
@@ -216,8 +235,11 @@ fn blockquoteStart(t: *Tree, container: *node.Node) anyerror!u8 {
         try markers.append(t.allocator, ws);
     }
     ctx.closeUnmatchedBlocks();
-    _ = try ctx.addChild(.blockquote);
-    _ = try ctx.addChildMarker(.blockquote_marker, try markers.toOwnedSlice(t.allocator));
+    const bq = try ctx.addChild(.blockquote);
+    bq.setSpan(start, ctx.line_end_norm);
+    const marker_bytes = try markers.toOwnedSlice(t.allocator);
+    const marker = try ctx.addChildMarker(.blockquote_marker, marker_bytes);
+    marker.setSpan(start, start + @as(u32, @intCast(marker_bytes.len)));
     return 1;
 }
 
@@ -243,8 +265,13 @@ fn fenceCodeBlockStart(t: *Tree, container: *node.Node) anyerror!u8 {
     const parsed = try parseFencedCode(t);
     if (!parsed.ok) return 0;
     const ctx = t.context;
+    const start = ctx.abs(ctx.next_nonspace);
     ctx.closeUnmatchedBlocks();
     const cb = try ctx.addChild(.code_block);
+    cb.setSpan(start, ctx.line_trimmed_end_norm);
+    cb.code_content_start = ctx.line_norm_start + @as(u32, @intCast(ctx.current_line_len));
+    cb.code_info_start = parsed.info_src_start;
+    cb.code_info_end = parsed.info_src_end;
     cb.is_fenced_code_block = true;
     cb.code_block_fence_char = parsed.fence_char;
     cb.code_block_fence_len = parsed.fence_len;
@@ -263,6 +290,8 @@ const Fence = struct {
     fence_offset: u32 = 0,
     open_fence: []u8 = &.{},
     info: []u8 = &.{},
+    info_src_start: u32 = 0,
+    info_src_end: u32 = 0,
 };
 
 fn parseFencedCode(t: *Tree) !Fence {
@@ -276,7 +305,10 @@ fn parseFencedCode(t: *Tree) !Fence {
     const open_fence = ctx.current_line[ctx.next_nonspace .. ctx.next_nonspace + len];
     const info_tokens = ctx.current_line[ctx.next_nonspace + len ..];
     if (marker == lex.backtick and std.mem.indexOfScalar(u8, info_tokens, lex.backtick) != null) return .{};
-    var info = lex.trimWhitespace(info_tokens);
+    const info_raw = lex.trimWhitespace(info_tokens);
+    const info_src_start = ctx.abs(@intFromPtr(info_raw.ptr) - @intFromPtr(ctx.current_line.ptr));
+    const info_src_end = info_src_start + @as(u32, @intCast(info_raw.len));
+    var info = info_raw;
     info = lex.trimWhitespace(try unescapeBytes(t.allocator, info));
     if (std.mem.indexOfScalar(u8, info, ' ')) |idx| info = info[0..idx];
     return .{
@@ -286,6 +318,8 @@ fn parseFencedCode(t: *Tree) !Fence {
         .fence_offset = @intCast(ctx.indent),
         .open_fence = open_fence,
         .info = try t.allocator.dupe(u8, info),
+        .info_src_start = info_src_start,
+        .info_src_end = info_src_end,
     };
 }
 
@@ -319,9 +353,12 @@ fn indentCodeBlockStart(t: *Tree, container: *node.Node) anyerror!u8 {
     const ctx = t.context;
     if (!ctx.options.indent_code_block or !ctx.indented) return 0;
     if (ctx.tip.typ != .paragraph and !ctx.blank) {
+        const start = ctx.abs(ctx.offset);
         ctx.advanceOffset(4, true);
         ctx.closeUnmatchedBlocks();
-        _ = try ctx.addChild(.code_block);
+        const cb = try ctx.addChild(.code_block);
+        cb.setSpan(start, ctx.line_trimmed_end_norm);
+        cb.code_content_start = start;
         return 2;
     }
     return 0;
@@ -333,6 +370,19 @@ fn codeBlockContinue(cb: *node.Node, ctx: *Context) u8 {
         if (ctx.indent <= 3) {
             if (isFencedCodeClose(ln[ctx.next_nonspace..], cb.code_block_fence_char, cb.code_block_fence_len)) |close| {
                 cb.code_block_close_fence = close;
+                const close_start = ctx.abs(ctx.next_nonspace);
+                cb.code_close_start = close_start;
+                cb.code_close_end = close_start + @as(u32, @intCast(close.len));
+                cb.src_end = close_start + @as(u32, @intCast(close.len));
+                var anc: ?*node.Node = cb.parent;
+                while (anc) |x| : (anc = x.parent) {
+                    switch (x.typ) {
+                        .blockquote, .list, .list_item => {
+                            if (cb.src_end > x.src_end) x.src_end = cb.src_end;
+                        },
+                        else => {},
+                    }
+                }
                 ctx.finalize(cb);
                 return 2;
             }
@@ -378,16 +428,19 @@ pub fn codeBlockFinalize(_: *Context, cb: *node.Node) void {
 fn listStart(t: *Tree, container: *node.Node) anyerror!u8 {
     const ctx = t.context;
     if (container.typ != .list and ctx.indented) return 0;
+    const marker_start = ctx.abs(ctx.next_nonspace);
     const data = try parseListMarker(t, container) orelse return 0;
     ctx.closeUnmatchedBlocks();
     const lists_match = container.typ == .list and listsMatch(container.list_data, data);
     if (ctx.tip.typ != .list or !lists_match) {
         const list = try ctx.addChild(.list);
         list.list_data = data;
+        list.setSpan(marker_start, ctx.line_trimmed_end_norm);
     }
     const item = try ctx.addChild(.list_item);
     item.list_data = data;
     item.tokens = data.marker;
+    item.setSpan(marker_start, ctx.line_trimmed_end_norm);
     if (data.typ == 1 or (data.typ == 3 and data.bullet_char == 0)) {
         if (item.prev) |prev| {
             item.list_data.num = prev.list_data.num + 1;

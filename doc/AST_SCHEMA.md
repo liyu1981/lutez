@@ -139,9 +139,11 @@ Tabs, TabItem, Mindmap, and any type ≥ 500.
 | 5 | `heading_setext` | setext heading | `HeadingSetext` |
 | 6 | `code_fenced` | fenced (vs indented) code block | `IsFencedCodeBlock` |
 | 7 | `task_checked` | task list item checked (legacy boolean view) | `TaskListItemChecked` |
-| 8–15 | reserved | must be zero on write, ignored on read | — |
+| 8 | `span_derived` | zero-width/synthesized span (no source bytes) | — |
+| 9–15 | reserved | must be zero on write, ignored on read | — |
 
-Bit 0 is written as 1 in v1 (all tokens in the pool).
+Bit 0 is written as 1 in v2 (all tokens in the pool). Node spans live in the wire node
+record (`src_norm_*`, `src_raw_*`), not in `flags`.
 
 `HeadingLevel`, `HtmlBlockType`, `ListData`, `LinkType`, etc. live in `ext`, not in
 flags (they are not booleans).
@@ -297,6 +299,15 @@ extension nodes.
 If a future in-scope feature needs one of these, it is a schema version bump.
 
 ---
+
+## 6.1 Source spans
+
+Every node in wire v2 carries `src_norm_start/end` and `src_raw_start/end` (half-open byte
+offsets) plus a `span_derived` flag. Raw offsets index the caller's original Markdown;
+normalized offsets index the CRLF/NUL-normalized buffer. Containers include their markers
+(e.g. `#`, `>`, list markers, fences); text/code/entity leaves cover their source bytes;
+synthesized nodes are zero-width and marked derived. Lazy blockquote/list continuation
+lines extend ancestor spans so children stay enclosed. See `WIRE_FORMAT.md` §3 and §4.1.
 
 ## 7. Validation duties
 

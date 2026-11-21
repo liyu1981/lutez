@@ -2,7 +2,7 @@ const snippetC = `#include "lutez.h"
 
 lutez_doc *doc = lutez_parse((const uint8_t *)md, len, NULL);
 size_t n;
-const uint8_t *ast = lutez_doc_ast(doc, &n);   /* wire format v1 */
+const uint8_t *ast = lutez_doc_ast(doc, &n);   /* wire format v2 */
 printf("%u nodes\\n", lutez_node_count(doc));
 lutez_doc_free(doc);`;
 
@@ -109,7 +109,7 @@ export function renderLanding({ version, upstreamSha }) {
           </div>
         </div>
         <div class="float-chip c1">0 imports</div>
-        <div class="float-chip c2">217 KB wasm</div>
+        <div class="float-chip c2">230 KB wasm</div>
       </div>
     </div>
     <div class="stat-strip">

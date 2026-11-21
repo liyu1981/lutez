@@ -5,9 +5,9 @@ CommonMark 0.31.2 + GFM **parser** in Zig, ported from
 C ABI library, a self-contained WASM module, and a JS wrapper. Rendering is out of scope:
 `lutez` turns Markdown bytes into a versioned binary AST.
 
-> Status: **v0.1.0.** CommonMark **652/652** AST parity, GFM **672/672** (tables,
+> Status: **v0.2.0.** CommonMark **652/652** AST parity, GFM **672/672** (tables,
 > strikethrough, task lists, extended autolinks), live differential **652/652**, HTML oracle
-> **652/652 byte-identical**, 8-thread TSan-clean, WASM **217 KB / zero imports**, parse
+> **652/652 byte-identical**, 8-thread TSan-clean, WASM **230 KB / zero imports**, parse
 > **3.9× faster** than upstream Go on the spec corpus. See
 > [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md) and [`doc/PORTING_NOTES.md`](doc/PORTING_NOTES.md).
 
@@ -19,7 +19,7 @@ C ABI library, a self-contained WASM module, and a JS wrapper. Rendering is out 
 #include "lutez.h"
 lutez_doc *doc = lutez_parse((const uint8_t *)md, len, NULL); /* NULL = defaults */
 size_t n;
-const uint8_t *ast = lutez_doc_ast(doc, &n);  /* wire format v1 */
+const uint8_t *ast = lutez_doc_ast(doc, &n);  /* wire format v2 */
 lutez_doc_free(doc);
 ```
 
@@ -31,7 +31,7 @@ Build: `zig build` → `zig-out/lib/liblutez.a`, `liblutez.so`, `include/lutez.h
 import { Lutez } from "./js/lutez.mjs";
 const lutez = await Lutez.load("zig-out/lib/lutez.wasm");
 const doc = lutez.parse("# hi *em*\n");
-const ast = doc.ast();            // Uint8Array (wire format v1)
+const ast = doc.ast();            // Uint8Array (wire format v2)
 doc.free();
 ```
 
@@ -108,7 +108,7 @@ source links and the GitHub nav item.
 |---|---|
 | [`doc/PLAN.md`](doc/PLAN.md) | scope, architecture, milestones, gates, risks, decisions |
 | [`doc/ABI.md`](doc/ABI.md) | C / WASM / JS / Zig API, ownership, errors, threading |
-| [`doc/WIRE_FORMAT.md`](doc/WIRE_FORMAT.md) | binary AST v1 |
+| [`doc/WIRE_FORMAT.md`](doc/WIRE_FORMAT.md) | binary AST v2 |
 | [`doc/AST_SCHEMA.md`](doc/AST_SCHEMA.md) | scoped node types, flags, ext layouts |
 | [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md) | performance vs Go |
 | [`doc/RELEASE.md`](doc/RELEASE.md) | release checklist and verification |
@@ -128,3 +128,8 @@ source links and the GitHub nav item.
 ## License
 
 Mulan PSL v2, same as upstream Lute. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+
+- Project copyright: Copyright (c) 2026 Yu Li and lutez contributors.
+- Derived work: parser semantics from Lute, Copyright (c) 2019-present b3log.org.
+- `LICENSE` contains the filled-in Mulan PSL v2 application statement (software name,
+  first-publication year, copyright holder); the license terms themselves are unchanged.

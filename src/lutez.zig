@@ -25,9 +25,16 @@ pub const unicode = @import("unicode/unicode.zig");
 pub const parse_mod = @import("parse/parse.zig");
 
 /// A parsed document. All memory is owned by the document arena.
+pub const source = @import("source.zig");
+pub const positions = @import("positions.zig");
+
 pub const Doc = struct {
     arena: std.heap.ArenaAllocator,
     root: *ast_node.Node,
+    /// Normalized input (CRLF/CR -> LF, NUL -> U+FFFD, trailing LF).
+    input: []u8,
+    /// Raw<->normalized offset map for source spans.
+    source_map: source.SourceMap,
 
     pub fn deinit(self: *Doc) void {
         self.arena.deinit();
@@ -54,7 +61,7 @@ pub fn parseWith(backing: std.mem.Allocator, input: []const u8, options: Options
     const a = arena.allocator();
     if (input.len > std.math.maxInt(u32)) return error.InputTooLarge;
     const t = try parse_mod.parse(a, input, options);
-    return .{ .arena = arena, .root = t.root };
+    return .{ .arena = arena, .root = t.root, .input = t.input, .source_map = t.source_map };
 }
 
 comptime {
@@ -62,6 +69,8 @@ comptime {
     _ = @import("lex/token.zig");
     _ = @import("ast/node.zig");
     _ = @import("ast/dump.zig");
+    _ = @import("source.zig");
+    _ = @import("positions.zig");
     _ = @import("ast/wire.zig");
     _ = @import("doc.zig");
     _ = @import("abi.zig");

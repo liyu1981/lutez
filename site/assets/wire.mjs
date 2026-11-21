@@ -130,19 +130,21 @@ export function decodeAst(bytes) {
   const magic = decoder.decode(bytes.subarray(0, 8));
   if (magic !== "LUTEAST1") throw new Error(`bad AST magic: ${magic}`);
   const version = view.getUint32(8, true);
-  if (version !== 1) throw new Error(`unsupported wire version ${version}`);
+  if (version !== 2) throw new Error(`unsupported wire version ${version}`);
   const count = view.getUint32(16, true);
   const stride = view.getUint32(20, true);
-  if (stride !== 48) throw new Error(`unsupported node stride ${stride}`);
+  if (stride !== 56) throw new Error(`unsupported node stride ${stride}`);
   const inputLen = view.getUint32(24, true);
   const poolLen = view.getUint32(28, true);
   const extLen = view.getUint32(32, true);
+  const mapLen = view.getUint32(36, true);
   const align8 = (n) => (n + 7) & ~7;
   const nodesOff = 40;
   const extrasOff = align8(nodesOff + count * stride);
   const inputOff = align8(extrasOff + extLen);
   const poolOff = align8(inputOff + inputLen);
-  if (poolOff + poolLen > bytes.length) throw new Error("truncated wire AST");
+  const mapOff = align8(poolOff + poolLen);
+  if (mapOff + mapLen > bytes.length) throw new Error("truncated wire AST");
   const pool = bytes.subarray(poolOff, poolOff + poolLen);
   const ABSENT = 0xffffffff;
 
@@ -158,8 +160,12 @@ export function decodeAst(bytes) {
     const next = rec.getUint32(20, true);
     const tokRef = rec.getUint32(24, true);
     const tokLen = rec.getUint32(28, true);
-    const extRef = rec.getUint32(40, true);
-    const extSize = rec.getUint32(44, true);
+    const normStart = rec.getUint32(32, true);
+    const normEnd = rec.getUint32(36, true);
+    const rawStart = rec.getUint32(40, true);
+    const rawEnd = rec.getUint32(44, true);
+    const extRef = rec.getUint32(48, true);
+    const extSize = rec.getUint32(52, true);
     let tokens = "";
     if (tokRef !== ABSENT && tokLen > 0 && tokRef + tokLen <= pool.length) {
       tokens = clean(decoder.decode(pool.subarray(tokRef, tokRef + tokLen)));
@@ -178,6 +184,9 @@ export function decodeAst(bytes) {
       firstChild: first === ABSENT ? null : first,
       children: [],
       depth: 0,
+      raw: [rawStart, rawEnd],
+      norm: [normStart, normEnd],
+      derived: (flags & (1 << 8)) !== 0,
     };
     if (extRef !== ABSENT && extSize > 0 && extRef + extSize <= extLen) {
       try { decodeExt(node, bytes.subarray(extrasOff + extRef, extrasOff + extRef + extSize)); } catch {}
@@ -195,7 +204,22 @@ export function decodeAst(bytes) {
       child = c.next;
     }
   }
-  return { count, nodes, root: nodes[0] || null, poolBytes: poolLen };
+  // The source map is kept for consumers that need token↔raw conversion.
+  const sourceMap = [];
+  if (mapLen >= 4) {
+    const n = view.getUint32(mapOff, true);
+    for (let i = 0; i < n; i++) {
+      const off = mapOff + 4 + i * 20;
+      sourceMap.push({
+        normStart: view.getUint32(off, true),
+        normLen: view.getUint32(off + 4, true),
+        rawStart: view.getUint32(off + 8, true),
+        rawLen: view.getUint32(off + 12, true),
+        kind: view.getUint8(off + 16),
+      });
+    }
+  }
+  return { count, nodes, root: nodes[0] || null, poolBytes: poolLen, sourceMap };
 }
 
 export function toJSON(decoded) {

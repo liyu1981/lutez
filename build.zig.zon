@@ -1,6 +1,6 @@
 .{
     .name = .lutez,
-    .version = "0.1.0",
+    .version = "0.2.0",
     .fingerprint = 0x3da3fab3617472df,
     .minimum_zig_version = "0.17.0",
     .dependencies = .{},
