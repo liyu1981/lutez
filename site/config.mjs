@@ -6,6 +6,9 @@ export const site = {
   description:
     "lutez is a CommonMark 0.31.2 + GFM parser written in Zig, ported from Lute. Callable from C and WASM, with a Lute-compatible AST.",
   repoUrl: (process.env.LUTEZ_REPO_URL || "").replace(/\/+$/, ""),
+  // Public origin (for example https://you.github.io/lutez). Used for absolute links in
+  // llms.txt; without it those links stay relative to the site root.
+  siteUrl: (process.env.LUTEZ_SITE_URL || "").replace(/\/+$/, ""),
   upstream: "https://github.com/88250/lute",
   license: "Mulan PSL v2",
 };

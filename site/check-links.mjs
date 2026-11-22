@@ -35,6 +35,24 @@ for (const file of files) {
     console.log(`broken: ${posix.relative(dist, file)} -> ${href}`);
   }
 }
+
+// llms.txt / llms-full.txt use Markdown links and are served from the site root.
+for (const name of ["llms.txt", "llms-full.txt"]) {
+  const file = join(dist, name);
+  const md = await readFile(file, "utf8").catch(() => "");
+  for (const m of md.matchAll(/\]\(([^)\s]+)\)/g)) {
+    const href = m[1];
+    if (/^(https?:|mailto:|#|\/\/)/i.test(href)) continue;
+    const [pathPart] = href.split("#");
+    if (!pathPart) continue;
+    const target = resolve(dist, pathPart);
+    if (await exists(target)) continue;
+    if (await exists(join(target, "index.html"))) continue;
+    broken++;
+    console.log(`broken: ${name} -> ${href}`);
+  }
+}
+
 if (broken) {
   console.error(`${broken} broken internal link(s)`);
   process.exit(1);

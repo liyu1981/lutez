@@ -93,6 +93,7 @@ export function page({ title, description, body, depth = 0, active = "", bodyCla
 <meta name="twitter:card" content="summary">
 <meta name="generator" content="lutez static site">
 <link rel="icon" href="${rel}assets/favicon.svg" type="image/svg+xml">
+<link rel="alternate" type="text/markdown" href="${rel}llms.txt" title="llms.txt">
 <link rel="stylesheet" href="${rel}assets/site.css">
 ${themeScript()}
 </head>

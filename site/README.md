@@ -9,6 +9,8 @@ included).
 ```
 site/
 ├── build.mjs              # static generator (docs + pages + assets)
+├── docmap.mjs             # doc slug <-> source path resolution for links
+├── llms.mjs               # llms.txt / llms-full.txt generation
 ├── serve.mjs              # tiny local server with application/wasm
 ├── config.mjs             # site metadata + docs manifest
 ├── templates/layout.mjs   # head/nav/footer/docs shell
@@ -26,6 +28,13 @@ site/
 Docs pages are generated from Markdown in `content/docs/` and `../doc/`; the manifest lives
 in `config.mjs`. Links between docs are rewritten to `.html`, and repository paths become
 GitHub links when `LUTEZ_REPO_URL` is set (otherwise they render as inert path chips).
+
+Each build also writes `dist/llms.txt` and `dist/llms-full.txt` per
+[llmstxt.org](https://llmstxt.org/): a Markdown index of every doc page with one-line
+summaries, plus every page concatenated as one file for single-request context. Links are
+absolute when `LUTEZ_SITE_URL` is set (for example `https://you.github.io/lutez`) and
+relative to the site root otherwise. Every page `<head>` advertises the index via
+`<link rel="alternate" type="text/markdown" href=".../llms.txt">`.
 
 ## Develop
 
@@ -60,6 +69,6 @@ run the two commands above and publish `site/dist/`.
 ## Checks
 
 ```sh
-pnpm check        # syntax-check the browser JS
-pnpm check:links  # verify every internal link resolves in dist/
+pnpm check        # syntax-check the generator and browser JS
+pnpm check:links  # verify every internal link (HTML, llms.txt) resolves in dist/
 ```

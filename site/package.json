@@ -9,7 +9,7 @@
     "build:fast": "node build.mjs --skip-zig",
     "dev": "node build.mjs && node serve.mjs",
     "serve": "node serve.mjs",
-    "check": "node --check build.mjs && node --check serve.mjs && node --check assets/demo.mjs && node --check assets/wire.mjs && node --check assets/site.js",
+    "check": "node --check build.mjs && node --check check-links.mjs && node --check config.mjs && node --check docmap.mjs && node --check llms.mjs && node --check serve.mjs && node --check assets/demo.mjs && node --check assets/wire.mjs && node --check assets/site.js",
     "check:links": "node check-links.mjs"
   },
   "dependencies": {

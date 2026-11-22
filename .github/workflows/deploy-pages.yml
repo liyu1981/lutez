@@ -34,11 +34,13 @@ jobs:
           cache: pnpm
           cache-dependency-path: site/pnpm-lock.yaml
       - run: zig build wasm
+      - id: pages
+        uses: actions/configure-pages@v5
       - run: cd site && pnpm install --frozen-lockfile && pnpm build:fast
         env:
           LUTEZ_REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          LUTEZ_SITE_URL: ${{ steps.pages.outputs.base_url }}
       - run: cd site && pnpm check:links
-      - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/dist

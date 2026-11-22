@@ -7,9 +7,11 @@ import { fileURLToPath } from "node:url";
 import { marked } from "marked";
 import { site, docs, docGroups } from "./config.mjs";
 import { page, docsLayout, esc, setVersion } from "./templates/layout.mjs";
+import { makeDocMap } from "./docmap.mjs";
 import { renderLanding } from "./pages/index.mjs";
 import { renderDemo } from "./pages/demo.mjs";
 import { renderNotFound } from "./pages/notfound.mjs";
+import { renderLlmsTxt, renderLlmsFullTxt } from "./llms.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "..");
@@ -50,8 +52,13 @@ cpSync(wasmSrc, join(dist, "wasm/lutez.wasm"));
 writeFileSync(join(dist, ".nojekyll"), "");
 writeFileSync(join(dist, "robots.txt"), "User-agent: *\nAllow: /\n");
 
+// ---- llms.txt (https://llmstxt.org/) -------------------------------------
+const llmsCtx = { site, docs, docGroups, version, upstreamSha, read };
+writeFileSync(join(dist, "llms.txt"), renderLlmsTxt(llmsCtx));
+writeFileSync(join(dist, "llms-full.txt"), renderLlmsFullTxt(llmsCtx));
+
 // ---- markdown -> docs ----------------------------------------------------
-const byBasename = new Map(docs.map((d) => [posix.basename(d.source).toLowerCase(), d.slug]));
+const docMap = makeDocMap(docs);
 
 function slugify(text, used) {
   let base = text
@@ -69,25 +76,22 @@ function slugify(text, used) {
 
 function rewriteLinks(html, doc) {
   const key = (href) => href.replace(/&amp;/g, "&");
-  return html.replace(/<a\s+([^>]*?)href="([^"]+)"([^>]*)>/g, (m, pre, rawHref, post) => {
+  return html.replace(/<a\s+([^>]*?)href="([^"]+)"([^>]*)>([\s\S]*?)<\/a>/g, (m, pre, rawHref, post, label) => {
     const href = key(rawHref);
-    if (/^(https?:|mailto:|#|\/\/)/i.test(href) || /^(\.\.?\/)?(demo|docs|assets|wasm)\b/i.test(href) || /\.html?($|#)/i.test(href)) {
+    if (/^(https?:|mailto:|#|\/\/)/i.test(href) || /^(demo|docs|assets|wasm)\b/i.test(href) || /^\.\.?\/(demo|docs|assets|wasm)\b/i.test(href) || /^(?:\.\.?\/)?[^/]+\.html?($|#)/i.test(href)) {
       const ext = /^https?:/i.test(href);
-      return `<a ${pre}href="${href}"${post}${ext ? ' rel="noopener"' : ""}>`;
+      return `<a ${pre}href="${href}"${post}${ext ? ' rel="noopener"' : ""}>${label}</a>`;
     }
     const [pathPart, hash = ""] = href.split("#");
-    const base = posix.basename(pathPart);
-    if (pathPart.endsWith(".md") && byBasename.has(base.toLowerCase())) {
-      return `<a ${pre}href="${byBasename.get(base.toLowerCase())}.html${hash ? "#" + hash : ""}"${post}>`;
+    const linked = docMap.get(pathPart);
+    if (linked) {
+      return `<a ${pre}href="${linked.slug}.html${hash ? "#" + hash : ""}"${post}>${label}</a>`;
     }
-    // Resolve other relative paths against the source doc, then map to the repo.
-    const fromRepo = posix.normalize(posix.join("doc", posix.relative("../doc", doc.source), pathPart));
-    const repoPath = posix.normalize(posix.join("doc", pathPart));
-    const resolved = fromRepo.startsWith("..") ? repoPath : fromRepo;
+    // Resolve other relative paths against the source doc's location in the repository.
+    const resolved = posix.normalize(posix.join(posix.dirname(docMap.repoPath(doc.source)), pathPart));
     if (site.repoUrl) {
-      return `<a ${pre}href="${site.repoUrl}/blob/main/${resolved}${hash ? "#" + hash : ""}" rel="noopener"${post}>`;
+      return `<a ${pre}href="${site.repoUrl}/blob/main/${resolved}${hash ? "#" + hash : ""}" rel="noopener"${post}>${label}</a>`;
     }
-    const label = m.replace(/^<a\s+[^>]*?>/, "").replace(/<\/a>$/, "");
     return `<span class="path-ref" title="Repository path: ${esc(resolved)}">${label}</span>`;
   });
 }
